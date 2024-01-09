@@ -108,7 +108,7 @@ function OthelloBoardInner() {
       setLoadingAiMove(true);
       // request ai move
       const res = await requestNextMoveFromAi(board, 0);
-      new_move = res?.moveIndex;
+      new_move = res?.move_index;
       setLoadingAiMove(false);
     }
     // if player b is ai and its their turn
@@ -116,7 +116,7 @@ function OthelloBoardInner() {
       setLoadingAiMove(true);
       // request ai move
       const res = await requestNextMoveFromAi(board, 1);
-      new_move = res?.moveIndex;
+      new_move = res?.move_index;
       setLoadingAiMove(false);
     }
     if (new_move != null) {

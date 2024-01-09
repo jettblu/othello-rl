@@ -10,15 +10,18 @@ import { DEFAULT_BACKEND_URL } from "@/constants";
  * @param player: 0 for player A, 1 for player B
  * @returns: a promise that resolves to the next move
  */
-export function requestNextMoveFromAi(
+export async function requestNextMoveFromAi(
   board: IBoard,
   player: 0 | 1
 ): Promise<ResponseAiMove> {
   // convert board to string
   const board_str = stringFromBoard(board);
-  const ruleBasedUrl = DEFAULT_BACKEND_URL + "/next_move/rule_based";
-  return fetch(ruleBasedUrl, {
+  const ruleBasedUrl = DEFAULT_BACKEND_URL + "/next_move/rule_based"+`/${board_str}/${player}`;
+  const res = await fetch(ruleBasedUrl, {
     method: "POST",
     body: JSON.stringify({ board: board_str, player_to_play: player }),
-  }).then((res) => res.json());
+  })
+  const res_json = await res.json();
+  console.log(res_json)
+  return res_json;
 }
