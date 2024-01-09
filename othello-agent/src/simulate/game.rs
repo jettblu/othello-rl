@@ -6,11 +6,11 @@ use crate::{
 
 use super::history::{ GameHistoryStore, GameHistory };
 
-struct OthelloSimulator {
+pub struct OthelloSimulator {
     agent0: RuleAgent,
     agent1: RuleAgent,
     board: IBoard,
-    history_Store: GameHistoryStore,
+    history_store: GameHistoryStore,
 }
 
 impl OthelloSimulator {
@@ -19,7 +19,7 @@ impl OthelloSimulator {
             agent0: RuleAgent::new(0),
             agent1: RuleAgent::new(1),
             board: INITIAL_BOARD,
-            history_Store: GameHistoryStore::new(),
+            history_store: GameHistoryStore::new(),
         }
     }
     pub fn play_game(&mut self) {
@@ -64,7 +64,7 @@ impl OthelloSimulator {
             num_skips = 0;
         }
         // add game history to store
-        self.history_Store.add_game(game_history);
+        self.history_store.add_game(game_history);
     }
 
     pub fn play_games(&mut self, num_games: u32) {
@@ -74,7 +74,7 @@ impl OthelloSimulator {
     }
 
     pub fn print_summary(&self) {
-        self.history_Store.print_summary();
+        self.history_store.print_summary();
     }
 }
 
@@ -91,9 +91,9 @@ mod tests {
         simulator.play_game();
         // won't see print summary unless test fails
         simulator.print_summary();
-        assert_eq!(simulator.history_Store.total_games, 1);
+        assert_eq!(simulator.history_store.total_games, 1);
         // get last game and ensure it exists
-        let last_game: Option<&GameHistory> = simulator.history_Store.last_game();
+        let last_game: Option<&GameHistory> = simulator.history_store.last_game();
         assert_eq!(last_game.is_some(), true);
         // ensure more moves than zero
         assert_eq!(last_game.unwrap().total_moves > 0, true);

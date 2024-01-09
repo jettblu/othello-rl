@@ -4,7 +4,6 @@ use crate::gameplay::{
 };
 use crate::agent::traits::Agent;
 
-use rand::{ thread_rng, Rng };
 pub struct RuleAgent {
     player: IPlayer,
 }
@@ -23,7 +22,7 @@ impl Agent for RuleAgent {
         self.select_move(suggested_moves)
     }
     fn suggest_moves(&self, board: IBoard) -> Vec<IPosition> {
-        let mut best_moves: Vec<IPosition> = suggest_moves_rules_based(board, self.player);
+        let best_moves: Vec<IPosition> = suggest_moves_rules_based(board, self.player);
         best_moves
     }
 }
