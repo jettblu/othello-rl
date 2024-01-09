@@ -24,6 +24,10 @@ pub fn position_from_piece_index(piece_index: i8) -> IPositionOption {
     })
 }
 
+pub fn piece_index_from_position(position: IPosition) -> i8 {
+    position.downwards * (DEFAULT_BOARD_HEIGHT as i8) + position.rightwards
+}
+
 ///
 /// Check whether any pieces are flipped by playing at certain position.
 pub fn flippable_pieces(board: IBoard, position: IPosition, player: IPlayer) -> Vec<IPosition> {
@@ -269,7 +273,7 @@ mod tests {
     use crate::gameplay::{
         constants::INITIAL_BOARD,
         recommender::suggest_moves_rules_based,
-        utils::player_has_move,
+        utils::{ player_has_move, position_from_piece_index },
     };
 
     #[test]
@@ -295,5 +299,19 @@ mod tests {
         ];
         let has_move = player_has_move(no_move_board, 0);
         assert_eq!(has_move, false);
+    }
+    // test piece index conversion
+    #[test]
+    fn can_convert_piece_index_to_position() {
+        let position = position_from_piece_index(0);
+        assert_eq!(position.is_some(), true);
+        assert_eq!(position.unwrap().downwards, 0);
+        let position = position_from_piece_index(63);
+        assert_eq!(position.is_some(), true);
+        assert_eq!(position.unwrap().rightwards, 7);
+        let position = position_from_piece_index(64);
+        assert_eq!(position.is_none(), true);
+        let position = position_from_piece_index(-1);
+        assert_eq!(position.is_none(), true);
     }
 }
