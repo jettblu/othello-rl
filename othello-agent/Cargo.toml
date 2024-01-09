@@ -1,5 +1,5 @@
 [package]
-name = "othello_agent"
+name = "othello-agent"
 version = "0.1.0"
 edition = "2021"
 description = "A simple Othello library. Contains useful methods for interacting with the game and creating autonomous Othello agents."
