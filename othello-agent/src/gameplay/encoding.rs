@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::gameplay::types::IBoard;
 
-use super::constants::INITIAL_BOARD;
+use crate::gameplay::constants::INITIAL_BOARD;
 
 ///
 ///
@@ -41,7 +41,6 @@ pub fn string_from_board(board: IBoard, code_chars: &str) -> String {
     chunks
         .iter()
         .map(|x| {
-            println!("{:?}", x);
             let index = u8::from_str_radix(x, 3).unwrap() as usize;
             code_chars.chars().nth(index).unwrap()
         })
@@ -63,14 +62,12 @@ pub fn board_from_string(s: &str, code_char_hash: &HashMap<char, u8>) -> IBoard 
     let mut board: Vec<u8> = s
         .chars()
         .flat_map(|x| {
-            println!("{:?} ", code_char_hash.get(&x).unwrap());
             let sum = 27 + *code_char_hash.get(&x).unwrap();
             let mut base_3_string = format_radix(sum as u32, 3);
             // clear whitespace
             base_3_string.retain(|c| !c.is_whitespace());
             // slice the last 3 characters
             base_3_string = base_3_string[base_3_string.len() - 3..].to_string();
-            println!("{:?}", base_3_string);
             base_3_string
                 .chars()
                 .map(|c| c.to_digit(10).unwrap() as u8)
