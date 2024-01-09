@@ -1,11 +1,8 @@
 import {
   CallEffect,
-  delay,
   put,
   PutEffect,
-  select,
   SelectEffect,
-  take,
   takeLatest,
 } from "redux-saga/effects";
 import {
@@ -16,11 +13,7 @@ import {
   UPDATE_BOARD,
 } from "../actions";
 import { IBoardUpdate } from "@/types";
-import {
-  boardScoreForPlayer,
-  playerCanPlay,
-  playerScore,
-} from "@/helpers/gameplay";
+import { playerCanPlay, playerScore } from "@/helpers/gameplay";
 
 export function* boardSaga(params: {
   type: string;
@@ -41,6 +34,8 @@ export function* boardSaga(params: {
   yield put({ type: SET_PLAYERB_SCORE, payload: newPlayerBScore });
   yield put({ type: SET_PLAYERA_CANPLAY, payload: newACanPlay });
   yield put({ type: SET_PLAYERB_CANPLAY, payload: newBCanPlay });
+  // if the last piece was placed by player A, then it's player B's turn
+  // if player B Can play, and player B is an AI, then we need to make a move
 }
 
 function* watcherSagas() {

@@ -36,3 +36,7 @@ export interface IPosition {
 export type IPiece = 0 | 1 | 2;
 
 export type IBoard = IPiece[];
+
+export type ResponseAiMove = {
+  moveIndex: number | null;
+};

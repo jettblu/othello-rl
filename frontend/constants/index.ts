@@ -90,3 +90,5 @@ export const x = 2, // signifies blank square: **MUST BE 2** because we use base
   };
 
 // https://jawj.github.io/fliptiles/#!/4/------k-zmzkkwkqk-px-q/56/0
+
+export const DEFAULT_BACKEND_URL = "http://127.0.0.1:8080";

@@ -4,10 +4,16 @@ import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
 import store from "@/store";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
-import { IBoardUpdate } from "@/types";
+import { IBoardUpdate, IPlayer, PlayerType } from "@/types";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { RESET_GAME, resetGame, toggleTurn } from "@/store/actions";
+import { useEffect, useState } from "react";
+import {
+  resetGame,
+  toggleTurn,
+  toggle_playerA_Ai,
+  toggle_playerB_Ai,
+} from "@/store/actions";
+import { requestNextMoveFromAi } from "@/helpers/requests";
 
 export default function OthelloBoard() {
   return (
@@ -22,6 +28,7 @@ function OthelloBoardInner() {
   const gameConfig = useSelector((state: IGlobalState) => state.gameAttrs);
   const playerA = useSelector((state: IGlobalState) => state.playerA);
   const playerB = useSelector((state: IGlobalState) => state.playerB);
+  const [loadingAiMove, setLoadingAiMove] = useState(false);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -33,8 +40,6 @@ function OthelloBoardInner() {
       pieceIndex,
       currPlayer
     );
-    console.log("update res", res);
-    console.log(playerB);
     if (!res) return false;
     // update query params with board strings
     const queryParams = new URLSearchParams(window.location.search);
@@ -67,6 +72,14 @@ function OthelloBoardInner() {
     dispatch(toggleTurn());
   }
 
+  function handleAiToggle(player: IPlayer) {
+    if (player == playerA) {
+      dispatch(toggle_playerA_Ai());
+    } else {
+      dispatch(toggle_playerB_Ai());
+    }
+  }
+
   function getQueryOnLoad() {
     const queryParams = new URLSearchParams(window.location.search);
     const boardStr = queryParams.get("board");
@@ -87,6 +100,33 @@ function OthelloBoardInner() {
       });
     }
   }
+
+  async function play_for_ai() {
+    let new_move: number | null = null;
+    // if player a is ai and its their turn
+    if (playerA.type == PlayerType.AI && gameConfig.turnStr == "0") {
+      setLoadingAiMove(true);
+      // request ai move
+      const res = await requestNextMoveFromAi(board, 0);
+      new_move = res?.moveIndex;
+      setLoadingAiMove(false);
+    }
+    // if player b is ai and its their turn
+    if (playerB.type == PlayerType.AI && gameConfig.turnStr == "1") {
+      setLoadingAiMove(true);
+      // request ai move
+      const res = await requestNextMoveFromAi(board, 1);
+      new_move = res?.moveIndex;
+      setLoadingAiMove(false);
+    }
+    if (new_move != null) {
+      handlePieceSelection(new_move);
+    }
+  }
+
+  useEffect(() => {
+    play_for_ai();
+  }, [board, playerA, playerB]);
 
   useEffect(() => {
     getQueryOnLoad();
@@ -121,6 +161,19 @@ function OthelloBoardInner() {
                 <p className="text-green-500 ml-3">Tie!</p>
               )
           }
+          {/* AI CHECKBOX */}
+          <div className="flex-grow">
+            {/* checkbox for ai */}
+            <div className="flex flex-row-reverse">
+              <input
+                type="checkbox"
+                className="form-checkbox h-5 w-5 text-green-500 my-auto"
+                checked={playerA.type == PlayerType.AI}
+                onChange={() => handleAiToggle(playerA)}
+              ></input>
+              <p className="text-white mr-2">AI</p>
+            </div>
+          </div>
         </div>
         <div className="flex flex-row bg-white rounded-full px-3 py-2">
           {playerB.name} ({playerB.score}) {currPlayer == 1 ? "To Play" : ""}
@@ -148,6 +201,19 @@ function OthelloBoardInner() {
                 <p className="text-green-500 ml-3">Tie!</p>
               )
           }
+          {/* AI CHECKBOX DIV */}
+          <div className="flex-grow">
+            {/* checkbox for ai */}
+            <div className="flex flex-row-reverse">
+              <input
+                type="checkbox"
+                className="form-checkbox h-5 w-5 text-green-500 my-auto"
+                checked={playerB.type == PlayerType.AI}
+                onChange={() => handleAiToggle(playerB)}
+              ></input>
+              <p className="text-black mr-2">AI</p>
+            </div>
+          </div>
         </div>
       </div>
       <div className="bg-green-700 rounded-2xl grid grid-cols-8 gap-x-2 gap-y-2 mt-8 px-3 py-5">
@@ -164,13 +230,24 @@ function OthelloBoardInner() {
         })}
       </div>
       {/* option to reset game */}
-      <div className="mt-8">
+      <div className="w-full flex flex-row mt-8">
         <p
           className="text-left text-lg md:text-2xl underline hover:cursor-pointer"
           onClick={handleReset}
         >
           Reset Game
         </p>
+        <div className="flex-grow ">
+          {/* spinner if loading ai move */}
+          {loadingAiMove && (
+            <div className="flex flex-row-reverse ">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500 "></div>
+              <span className="text-lg mr-2 text-center text-gray-500 mr-2">
+                AI is thinking...
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
