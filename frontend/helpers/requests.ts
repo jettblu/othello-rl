@@ -14,14 +14,19 @@ export async function requestNextMoveFromAi(
   board: IBoard,
   player: 0 | 1
 ): Promise<ResponseAiMove> {
-  // convert board to string
-  const board_str = stringFromBoard(board);
-  const ruleBasedUrl = DEFAULT_BACKEND_URL + "/next_move/rule_based"+`/${board_str}/${player}`;
-  const res = await fetch(ruleBasedUrl, {
-    method: "POST",
-    body: JSON.stringify({ board: board_str, player_to_play: player }),
-  })
-  const res_json = await res.json();
-  console.log(res_json)
-  return res_json;
+  try {
+    // convert board to string
+    const board_str = stringFromBoard(board);
+    const ruleBasedUrl =
+      DEFAULT_BACKEND_URL + "/next_move/rule_based" + `/${board_str}/${player}`;
+    const res = await fetch(ruleBasedUrl, {
+      method: "GET",
+    });
+    const res_json = await res.json();
+    console.log(res_json);
+    return res_json;
+  } catch (err) {
+    console.warn(err);
+    return { move_index: null };
+  }
 }

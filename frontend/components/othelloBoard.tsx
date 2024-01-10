@@ -28,6 +28,7 @@ function OthelloBoardInner() {
   const gameConfig = useSelector((state: IGlobalState) => state.gameAttrs);
   const playerA = useSelector((state: IGlobalState) => state.playerA);
   const playerB = useSelector((state: IGlobalState) => state.playerB);
+  const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0); // seconds since last ai move
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const dispatch = useDispatch();
   const pathName = usePathname();
@@ -103,13 +104,14 @@ function OthelloBoardInner() {
 
   async function play_for_ai() {
     let new_move: number | null = null;
+    // start timer to see how long request takes
+    let startTime = Date.now();
     // if player a is ai and its their turn
     if (playerA.type == PlayerType.AI && gameConfig.turnStr == "0") {
       setLoadingAiMove(true);
       // request ai move
       const res = await requestNextMoveFromAi(board, 0);
       new_move = res?.move_index;
-      setLoadingAiMove(false);
     }
     // if player b is ai and its their turn
     if (playerB.type == PlayerType.AI && gameConfig.turnStr == "1") {
@@ -117,11 +119,28 @@ function OthelloBoardInner() {
       // request ai move
       const res = await requestNextMoveFromAi(board, 1);
       new_move = res?.move_index;
-      setLoadingAiMove(false);
     }
     if (new_move != null) {
+      let end_time = Date.now();
+      // check how long it took
+      let time_taken = end_time - startTime;
+      if (time_taken < 500) {
+        // if it took less than half a second, wait half a second
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      // to one hundredth of a second
+      const timeAsSeconds = Math.round(time_taken / 10) / 100;
+      // update seconds since last ai move
+      setSecondsForLastAiMove(timeAsSeconds);
       handlePieceSelection(new_move);
     }
+    if (
+      new_move == null &&
+      (playerA.type == PlayerType.AI || playerB.type == PlayerType.AI)
+    ) {
+      console.error("Unable to get AI move");
+    }
+    setLoadingAiMove(false);
   }
 
   useEffect(() => {
@@ -244,6 +263,13 @@ function OthelloBoardInner() {
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500 "></div>
               <span className="text-lg mr-2 text-center text-gray-500 mr-2">
                 AI is thinking...
+              </span>
+            </div>
+          )}
+          {!loadingAiMove && secondsForLastAiMove > 0 && (
+            <div className="flex flex-row-reverse ">
+              <span className="text-lg mr-2 text-center text-gray-500 mr-2">
+                AI took {secondsForLastAiMove} seconds
               </span>
             </div>
           )}
