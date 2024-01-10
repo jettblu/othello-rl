@@ -1,4 +1,8 @@
 use actix_web::{ get, post, web, App, HttpResponse, HttpServer, Responder };
+use othello_agent::gameplay::constants::CODE_CHARS;
+use othello_agent::gameplay::encoding::board_from_string;
+use othello_agent::gameplay::encoding::create_code_char_hash;
+use othello_agent::gameplay::types::IBoard;
 use serde::Deserialize;
 use serde::Serialize;
 // disable formatting for this line from code formatter
@@ -35,13 +39,15 @@ async fn manual_hello() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
 
-#[get("/next_move/rule_based/{board}/{player}")] // <- define path parameters
+#[get("/next_move/rule_based/{board_str}/{player}")] // <- define path parameters
 async fn next_move_rule_based(
     path: web::Path<(String, IPlayer)>
 ) -> Result<web::Json<MoveResponse>, actix_web::Error> {
-    let (board, player) = path.into_inner();
-    let agent = RuleAgent::new(0);
-    let move_position: Option<IPosition> = agent.get_move(INITIAL_BOARD);
+    let (board_str, player) = path.into_inner();
+    let hash_map = create_code_char_hash(CODE_CHARS);
+    let board: IBoard = board_from_string(&board_str, &hash_map);
+    let agent = RuleAgent::new(player);
+    let move_position: Option<IPosition> = agent.get_move(board);
     if move_position.is_none() {
         return Ok(
             web::Json({ MoveResponse {

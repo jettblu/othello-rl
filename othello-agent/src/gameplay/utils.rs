@@ -125,7 +125,6 @@ pub fn board_by_playing_piece_at_index(
     position: IPosition,
     player: IPlayer
 ) -> Option<IBoard> {
-    println!("Right {}, Down {}", position.rightwards, position.downwards);
     let mut new_board = board;
     let curr_piece = new_board[position.downwards as usize][position.rightwards as usize];
     if !is_piece_placeholder(curr_piece) {

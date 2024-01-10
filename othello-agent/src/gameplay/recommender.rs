@@ -13,7 +13,6 @@ pub fn suggest_moves_rules_based(board: IBoard, player: IPlayer) -> Vec<IPositio
                 col_index += 1;
                 continue;
             }
-            println!("Row: {} Col: {}", row_index, col_index);
             // make move and get score
             let worst_case_score = worst_score_by_playing_piece_at_index(
                 board,
