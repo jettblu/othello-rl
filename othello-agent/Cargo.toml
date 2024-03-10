@@ -11,3 +11,4 @@ license = "Apache-2.0"
 
 [dependencies]
 rand = "0.8.5"
+burn = { version = "0.12.1", features=["train", "wgpu"]}
