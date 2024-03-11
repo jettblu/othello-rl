@@ -8,6 +8,7 @@ export interface IPlayer {
 export enum PlayerType {
   Human,
   AI,
+  Remote
 }
 
 export interface IGameAttrs {

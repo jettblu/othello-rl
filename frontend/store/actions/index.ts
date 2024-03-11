@@ -10,6 +10,8 @@ export const SET_PLAYERB_SCORE = "SET_PLAYERB_SCORE";
 export const SET_PLAYERA_CANPLAY = "SET_PLAYERA_CANPLAY";
 export const SET_PLAYERB_CANPLAY = "SET_PLAYERB_CANPLAY";
 export const TOGGLE_TURN = "CHANGE_TURN";
+export const TOGGLE_PLAYERA_REMOTE = "SET_PLAYERA_REMOTE";
+export const TOGGLE_PLAYERB_REMOTE = "SET_PLAYERB_REMOTE";
 
 export const resetGame = () => ({
   type: RESET_GAME,
@@ -17,6 +19,14 @@ export const resetGame = () => ({
 
 export const toggle_playerA_Ai = () => ({
   type: TOGGLE_PLAYERA_AI,
+});
+
+export const toggle_PlayerA_Remote = () => ({
+  type: TOGGLE_PLAYERA_REMOTE,
+});
+
+export const toggle_PlayerB_Remote = () => ({
+  type: TOGGLE_PLAYERB_REMOTE,
 });
 
 export const toggle_playerB_Ai = () => ({

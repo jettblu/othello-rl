@@ -2,7 +2,6 @@ import { IBoard, IGameAttrs, IPlayer } from "@/types";
 import {
   TOGGLE_PLAYERA_AI,
   TOGGLE_PLAYERB_AI,
-  setGameConfig,
   SET_GAME_ATTRS,
   UPDATE_BOARD,
   SET_PLAYERA_SCORE,
@@ -11,9 +10,10 @@ import {
   TOGGLE_TURN,
   SET_PLAYERA_CANPLAY,
   SET_PLAYERB_CANPLAY,
+  TOGGLE_PLAYERA_REMOTE,
+  TOGGLE_PLAYERB_REMOTE,
 } from "../actions";
-import { initialBoard, initialBoardStr, initialGameConfig } from "@/constants";
-import { encodeFlags } from "@/helpers/gameplay";
+import { initialBoard, initialGameConfig } from "@/constants";
 
 export interface IGlobalState {
   playerA: IPlayer;
@@ -48,12 +48,14 @@ const gameReducer = (state = globalState, action: any) => {
         ...state,
         playerA: {
           ...state.playerA,
+          type: 0,
           score: 0,
           hasMove: true,
         },
         playerB: {
           ...state.playerB,
           score: 0,
+          type: 0,
           hasMove: true,
         },
         board: initialBoard,
@@ -75,6 +77,24 @@ const gameReducer = (state = globalState, action: any) => {
         playerB: {
           ...state.playerB,
           type: state.playerB.type === 0 ? 1 : 0,
+        },
+      };
+
+    case TOGGLE_PLAYERA_REMOTE:
+      return {
+        ...state,
+        playerA: {
+          ...state.playerA,
+          type: state.playerA.type === 0 ? 2 : 0,
+        },
+      };
+
+    case TOGGLE_PLAYERB_REMOTE:
+      return {
+        ...state,
+        playerB: {
+          ...state.playerB,
+          type: state.playerB.type === 0 ? 2 : 0,
         },
       };
 

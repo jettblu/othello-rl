@@ -5,7 +5,10 @@ export default function OthelloPiece(params: {
   pieceIndex: number;
   playerIndex: number;
   wasLastMove: boolean;
-  handlePieceSelection: (pieceIndex: number) => boolean;
+  handlePieceSelection: (
+    pieceIndex: number,
+    triggeredByRemote: boolean
+  ) => boolean;
 }) {
   const { pieceIndex, playerIndex, handlePieceSelection } = params;
   const [color, setColor] = useState<string>(GREEN_SPACE_HOLDER);
@@ -13,7 +16,7 @@ export default function OthelloPiece(params: {
   // briefly set color to red if update fails
 
   function pieceSelector(pieceIndex: number) {
-    const updateSuccess = handlePieceSelection(pieceIndex);
+    const updateSuccess = handlePieceSelection(pieceIndex, false);
     console.log("updateSuccess", updateSuccess);
     if (!updateSuccess && playerIndex == 2) {
       // set to slightly transparent red
