@@ -12,6 +12,7 @@
     "next": "14.0.4",
     "react": "^18",
     "react-dom": "^18",
+    "react-hot-toast": "^2.4.1",
     "react-redux": "^9.0.4",
     "redux-saga": "^1.2.3",
     "socket.io-client": "^4.7.4"

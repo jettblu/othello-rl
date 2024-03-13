@@ -16,7 +16,7 @@ import {
   toggle_playerB_Ai,
 } from "@/store/actions";
 import { requestNextMoveFromAi } from "@/helpers/requests";
-import { DEFAULT_BACKEND_HOST } from "@/constants";
+import toast from "react-hot-toast";
 
 interface IBoardParams {
   realtimeConfig?: IRealtimeConfig;
@@ -51,6 +51,7 @@ function OthelloBoardInner(params: IBoardParams) {
   );
   // state for web socket object
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [waitingForPlayer, setWaitingForPlayer] = useState<boolean>(false);
   const [mostRecentMessage, setMostRecentMessage] = useState<string>("");
   const dispatch = useDispatch();
   const pathName = usePathname();
@@ -61,6 +62,9 @@ function OthelloBoardInner(params: IBoardParams) {
   // add disconnect notification
   // add connect notification
   // add ability to restart game in remote mode
+  // add indicator for remote/self
+  // add share link
+  // update ws to use wss in production
   // add move history
   // add win probability prediction
   function handlePieceSelection(
@@ -137,6 +141,10 @@ function OthelloBoardInner(params: IBoardParams) {
     queryParams.set("lastPiece", "");
     // update url back
     router.push(`/`);
+    // TODO: CONSIDER ALLLOWING RESET OF REMOTE GAMES
+    setRealtimeConfig(null);
+    // socket?.close();
+    // setSocket(null);
     dispatch(resetGame());
   }
 
@@ -243,6 +251,10 @@ function OthelloBoardInner(params: IBoardParams) {
     // navigate to the game with the game id
     // make new id that is eight characters long
     const newGameId = Math.random().toString(36).substring(2, 10);
+    let linkToGame = `${window.location.origin}/live/${newGameId}`;
+    // copy to clipboard
+    navigator.clipboard.writeText(linkToGame);
+    toast.success("Copied game link to clipboard");
     router.push(`/live/${newGameId}`);
   }
 
@@ -251,13 +263,21 @@ function OthelloBoardInner(params: IBoardParams) {
   }, []);
 
   useEffect(() => {
+    if (!realtimeConfig) return;
     // if we already have a socket, close it
     if (socket) {
       socket.close();
     }
+    setWaitingForPlayer(true);
+    // get is produ environment variable
+    let isProd = process.env.NEXT_PUBLIC_IS_PROD?.toLowerCase() == "true";
+    let proto = isProd ? "wss" : "ws";
     // set up web socket
     // set up web socket connection
-    const newWebsocket = new WebSocket(`ws://${DEFAULT_BACKEND_HOST}/ws`);
+    let backendHost = isProd
+      ? process.env.NEXT_PUBLIC_API_HOST_PROD
+      : process.env.NEXT_PUBLIC_API_HOST;
+    const newWebsocket = new WebSocket(`${proto}://${backendHost}/ws`);
     newWebsocket.onopen = () => {
       console.log("connected");
       if (realtimeConfig) {
@@ -270,11 +290,12 @@ function OthelloBoardInner(params: IBoardParams) {
       if (!realtimeConfig) return;
       let newMsg = event.data;
       setMostRecentMessage(newMsg);
-      if (newMsg.includes("Someone connected")) {
+      if (newMsg.includes("Someone joined")) {
         newWebsocket.send("you are player b");
       }
     };
     newWebsocket.onclose = () => {
+      toast.error("Disconnected from game");
       console.log("disconnected");
     };
     // set socket state
@@ -287,12 +308,25 @@ function OthelloBoardInner(params: IBoardParams) {
     console.log("Received message", mostRecentMessage);
 
     // if someone else joined the game, then we set player b to remote
-    if (mostRecentMessage.includes("Someone connected")) {
+    if (mostRecentMessage.includes("Someone joined")) {
       console.log("Setting player b to remote");
       dispatch(toggle_PlayerB_Remote());
+      setWaitingForPlayer(false);
+      toast.success("Another player has joined the game!");
+    }
+    // if someone disconnedcted, let player know
+    // TODO: ADD ADDITIONAL HANDLING INCLUDING RESTORING GAME FROM CURRENT STATE
+    if (mostRecentMessage.includes("Someone disconnected")) {
+      console.log("Someone disconnected");
+      setWaitingForPlayer(true);
+      toast.error("Other player disconnected");
+      // for now just reset the game
+      handleReset();
     }
     if (mostRecentMessage.includes("you are player b")) {
       console.log("Setting player a to remote");
+      toast.success("You are player b!");
+      setWaitingForPlayer(false);
       dispatch(toggle_PlayerA_Remote());
     }
     // check if message is a move
@@ -437,15 +471,24 @@ function OthelloBoardInner(params: IBoardParams) {
             )}
           </div>
         </div>
-        <div className="w-full flex flex-row ">
-          {/* option to reset game */}
-          <p
-            className="text-left text-lg md:text-2xl underline hover:cursor-pointer"
-            onClick={handleStartRemoteGame}
-          >
-            Start Remote Game
-          </p>
-        </div>
+        {waitingForPlayer && (
+          <div className="w-full flex flex-row ">
+            <p className="text-left text-lg md:text-2xl">
+              Waiting for player to join...
+            </p>
+          </div>
+        )}
+        {!waitingForPlayer && realtimeConfig == null && (
+          <div className="w-full flex flex-row ">
+            {/* option to reset game */}
+            <p
+              className="text-left text-lg md:text-2xl underline hover:cursor-pointer"
+              onClick={handleStartRemoteGame}
+            >
+              Start Remote Game
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

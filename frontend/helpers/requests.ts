@@ -2,7 +2,6 @@
 
 import { ResponseAiMove, IBoard } from "@/types";
 import { stringFromBoard } from "./gameplay";
-import { DEFAULT_BACKEND_URL } from "@/constants";
 
 /*
  * Makes a request to the API to get the next move for the given board and player
@@ -22,7 +21,7 @@ export async function requestNextMoveFromAi(
         ? process.env.NEXT_PUBLIC_API_URL_PROD
         : process.env.NEXT_PUBLIC_API_URL_DEV;
     const ruleBasedUrl =
-      DEFAULT_BACKEND_URL + "/next_move/rule_based" + `/${board_str}/${player}`;
+      backendUrl + "/next_move/rule_based" + `/${board_str}/${player}`;
     const res = await fetch(ruleBasedUrl, {
       method: "GET",
     });
