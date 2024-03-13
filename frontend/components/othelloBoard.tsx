@@ -148,6 +148,7 @@ function OthelloBoardInner(params: IBoardParams) {
     dispatch(resetGame());
   }
 
+  // toggle current turn
   function handleTurnToggle() {
     const queryParams = new URLSearchParams(window.location.search);
     queryParams.set("turn", currPlayer == 0 ? "1" : "0");
