@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "fathom-client": "^3.6.0",
     "next": "14.0.4",
     "react": "^18",
     "react-dom": "^18",
