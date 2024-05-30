@@ -1,5 +1,5 @@
 use super::{
-    constants::{ CODE_CHARS, DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH, INITIAL_BOARD },
+    constants::{ CODE_CHARS, INITIAL_BOARD },
     encoding::string_from_board,
     position::IPosition,
     utils::{
@@ -28,7 +28,7 @@ impl IGame {
         IGame {
             board: INITIAL_BOARD,
             last_piece: 0,
-            turn: 1,
+            turn: 0,
         }
     }
     pub fn get_valid_moves(&self, player: IPlayer) -> Vec<IPosition> {
