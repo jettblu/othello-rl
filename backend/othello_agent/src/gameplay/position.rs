@@ -1,5 +1,9 @@
+use serde::Deserialize;
+
 use super::constants::{ DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH };
 
+// derive debug
+#[derive(Debug, Deserialize)]
 pub struct IPosition {
     // can also represent a vector movement
     pub rightwards: i8,
