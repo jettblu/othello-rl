@@ -1,36 +1,9 @@
-use crate::gameplay::types::{ IPosition, IPositionOption, IBoard };
+use crate::gameplay::constants::DIRECTIONS;
 
-use crate::gameplay::constants::{ DIRECTIONS, DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH };
+use super::{ game::{ IBoard, IPiece, IPlayer }, position::IPosition };
 
-use crate::gameplay::types::{ IPlayer, IPiece };
-
-///
-/// Converts a 1d piece index to a 2d position characterized by rightward and downward movement.
-///
-/// # Arguments
-///
-/// * `piece_index` - The index of the piece.
-///
-pub fn position_from_piece_index(piece_index: i8) -> IPositionOption {
-    if
-        piece_index < 0 ||
-        piece_index >= (DEFAULT_BOARD_HEIGHT as i8) * (DEFAULT_BOARD_HEIGHT as i8)
-    {
-        return None;
-    }
-    Some(IPosition {
-        downwards: piece_index / (DEFAULT_BOARD_HEIGHT as i8),
-        rightwards: piece_index % (DEFAULT_BOARD_WIDTH as i8),
-    })
-}
-
-pub fn piece_index_from_position(position: IPosition) -> i8 {
-    position.downwards * (DEFAULT_BOARD_HEIGHT as i8) + position.rightwards
-}
-
-///
 /// Check whether any pieces are flipped by playing at certain position.
-pub fn flippable_pieces(board: IBoard, position: IPosition, player: IPlayer) -> Vec<IPosition> {
+pub fn flippable_pieces(board: IBoard, position: &IPosition, player: IPlayer) -> Vec<IPosition> {
     let opponent = 1 - player;
     let mut flippable_pieces: Vec<IPosition> = Vec::new();
 
@@ -69,7 +42,7 @@ pub fn flippable_pieces(board: IBoard, position: IPosition, player: IPlayer) -> 
 /// * `board` - The board to flip pieces on.
 /// * `position` - The position to flip pieces with respect to.
 /// * `player` - The player to flip pieces for.
-pub fn flip_pieces(board: IBoard, position: IPosition, player: u8) -> IBoard {
+pub fn flip_pieces(board: IBoard, position: &IPosition, player: u8) -> IBoard {
     let flippable_pieces = flippable_pieces(board, position, player);
     let mut new_board = board;
     for flippable_piece in flippable_pieces.iter() {
@@ -91,13 +64,13 @@ pub fn flip_pieces(board: IBoard, position: IPosition, player: u8) -> IBoard {
 pub fn augmented_score_for_player(
     board: IBoard,
     player: IPlayer,
-    corner_score: i16,
-    edge_score: i16,
-    other_score: i16
-) -> i16 {
+    corner_score: i8,
+    edge_score: i8,
+    other_score: i8
+) -> i8 {
     let mut row_index = 0;
     let mut col_index: i8 = 0;
-    let mut score: i16 = 0;
+    let mut score: i8 = 0;
     for row in board.iter() {
         for piece in row.iter() {
             if *piece == player {
@@ -122,7 +95,7 @@ pub fn augmented_score_for_player(
 
 pub fn board_by_playing_piece_at_index(
     board: IBoard,
-    position: IPosition,
+    position: &IPosition,
     player: IPlayer
 ) -> Option<IBoard> {
     let mut new_board = board;
@@ -130,7 +103,7 @@ pub fn board_by_playing_piece_at_index(
     if !is_piece_placeholder(curr_piece) {
         return None;
     }
-    if flippable_pieces(board, position.duplicate(), player).is_empty() {
+    if flippable_pieces(board, &position, player).is_empty() {
         return None;
     }
     // play piece at position
@@ -163,10 +136,10 @@ pub fn player_has_move(board: IBoard, player: IPlayer) -> bool {
         for _ in row.iter() {
             let flippable_pieces = flippable_pieces(
                 board,
-                IPosition {
+                &(IPosition {
                     downwards: row_index,
                     rightwards: col_index,
-                },
+                }),
                 player
             );
             if flippable_pieces.len() > 0 {
@@ -199,11 +172,11 @@ pub fn worst_score_by_playing_piece_at_index(
     board: IBoard,
     position: IPosition,
     player: IPlayer,
-    corner_score: i16,
-    edge_score: i16,
-    other_score: i16
-) -> Option<i16> {
-    let board_new = board_by_playing_piece_at_index(board, position, player);
+    corner_score: i8,
+    edge_score: i8,
+    other_score: i8
+) -> Option<i8> {
+    let board_new = board_by_playing_piece_at_index(board, &position, player);
     if board_new.is_none() {
         return None;
     }
@@ -223,11 +196,11 @@ pub fn worst_score_by_playing_piece_at_index(
         other_score
     );
     // how good is this move immediately?
-    let tie_break_score: i16 = new_score - new_score_oppoenent;
+    let tie_break_score: i8 = new_score - new_score_oppoenent;
     let mut row_index = 0;
     let mut col_index: i8 = 0;
-    // max number for number type i16
-    let mut worst_case_score: i16 = 32767;
+    // max number for number type i8
+    let mut worst_case_score: i8 = 127;
     for row in board.iter() {
         for piece in row.iter() {
             if !is_piece_placeholder(*piece) {
@@ -237,10 +210,10 @@ pub fn worst_score_by_playing_piece_at_index(
             // make move and get score
             let board_after_opponent_plays = board_by_playing_piece_at_index(
                 board,
-                IPosition {
+                &(IPosition {
                     downwards: row_index,
                     rightwards: col_index,
-                },
+                }),
                 opponent
             );
             if board_after_opponent_plays.is_none() {
@@ -271,8 +244,9 @@ pub fn worst_score_by_playing_piece_at_index(
 mod tests {
     use crate::gameplay::{
         constants::INITIAL_BOARD,
+        position::IPosition,
         recommender::suggest_moves_rules_based,
-        utils::{ player_has_move, position_from_piece_index },
+        utils::player_has_move,
     };
 
     #[test]
@@ -302,15 +276,15 @@ mod tests {
     // test piece index conversion
     #[test]
     fn can_convert_piece_index_to_position() {
-        let position = position_from_piece_index(0);
+        let position = IPosition::position_from_piece_index(0);
         assert_eq!(position.is_some(), true);
         assert_eq!(position.unwrap().downwards, 0);
-        let position = position_from_piece_index(63);
+        let position = IPosition::position_from_piece_index(63);
         assert_eq!(position.is_some(), true);
         assert_eq!(position.unwrap().rightwards, 7);
-        let position = position_from_piece_index(64);
+        let position = IPosition::position_from_piece_index(64);
         assert_eq!(position.is_none(), true);
-        let position = position_from_piece_index(-1);
+        let position = IPosition::position_from_piece_index(-1);
         assert_eq!(position.is_none(), true);
     }
 }

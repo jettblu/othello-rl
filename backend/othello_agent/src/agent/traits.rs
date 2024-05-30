@@ -1,6 +1,6 @@
 use rand::{ thread_rng, Rng };
 
-use crate::gameplay::types::{ IBoard, IPosition };
+use crate::gameplay::{ game::IBoard, position::IPosition };
 
 pub trait Agent {
     fn suggest_moves(&self, board: IBoard) -> Vec<IPosition>;

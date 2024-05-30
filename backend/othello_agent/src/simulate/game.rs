@@ -1,7 +1,6 @@
 use crate::{
-    agent::rule_based::RuleAgent,
-    agent::traits::Agent,
-    gameplay::{ constants::INITIAL_BOARD, types::IBoard, utils::board_by_playing_piece_at_index },
+    agent::{ rule_based::RuleAgent, traits::Agent },
+    gameplay::{ constants::INITIAL_BOARD, game::IBoard, utils::board_by_playing_piece_at_index },
 };
 
 use super::history::{ GameHistoryStore, GameHistory };
@@ -52,7 +51,7 @@ impl OthelloSimulator {
             // try to play move... should work as valid moves have already been filtered
             let new_board: Option<IBoard> = board_by_playing_piece_at_index(
                 current_board,
-                move_position.unwrap(),
+                &move_position.unwrap(),
                 current_player
             );
             if new_board.is_none() {
@@ -105,7 +104,7 @@ mod tests {
         // ensure scores add up to DEFAULT_BOARD_WIDTH * DEFAULT_BOARD_HEIGHT
         assert_eq!(
             last_game.unwrap().agent0_score + last_game.unwrap().agent1_score,
-            (DEFAULT_BOARD_WIDTH as i16) * (DEFAULT_BOARD_WIDTH as i16)
+            (DEFAULT_BOARD_WIDTH * DEFAULT_BOARD_WIDTH) as i8
         );
     }
 }

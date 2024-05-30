@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::gameplay::types::IBoard;
-
 use crate::gameplay::constants::INITIAL_BOARD;
+
+use super::game::IBoard;
 
 ///
 ///

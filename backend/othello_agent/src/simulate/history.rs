@@ -1,6 +1,6 @@
 use crate::gameplay::constants::CODE_CHARS;
-use crate::gameplay::types::IBoard;
 use crate::gameplay::encoding::string_from_board;
+use crate::gameplay::game::IBoard;
 use crate::gameplay::utils::augmented_score_for_player;
 
 pub struct GameHistory {
@@ -9,8 +9,8 @@ pub struct GameHistory {
     // total number of moves
     pub total_moves: u16,
     // scores for both players
-    pub agent0_score: i16,
-    pub agent1_score: i16,
+    pub agent0_score: i8,
+    pub agent1_score: i8,
     // id of game... should be autoincremented
     pub id: u32,
 }
@@ -25,7 +25,7 @@ impl GameHistory {
             id: 0,
         }
     }
-    pub fn set_scores(&mut self, agent0_score: i16, agent1_score: i16) {
+    pub fn set_scores(&mut self, agent0_score: i8, agent1_score: i8) {
         self.agent0_score = agent0_score;
         self.agent1_score = agent1_score;
     }

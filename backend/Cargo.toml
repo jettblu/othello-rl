@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+   "othello_server",
+   "othello_agent"
+]

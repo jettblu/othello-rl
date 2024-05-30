@@ -1,12 +1,14 @@
-use crate::gameplay::types::{ IBoard, IPosition, IPlayer };
 use crate::gameplay::constants::{ DEFAULT_CORNER_SCORE, DEFAULT_EDGE_SCORE, DEFAULT_OTHER_SCORE };
 use crate::gameplay::utils::{ is_piece_placeholder, worst_score_by_playing_piece_at_index };
+
+use super::game::{ IBoard, IPlayer };
+use super::position::IPosition;
 
 pub fn suggest_moves_rules_based(board: IBoard, player: IPlayer) -> Vec<IPosition> {
     let mut best_moves: Vec<IPosition> = Vec::new();
     let mut row_index: i8 = 0;
     let mut col_index: i8 = 0;
-    let mut best_worst_case_score: i16 = 32767;
+    let mut best_worst_case_score: i8 = 127;
     for row in board.iter() {
         for piece in row.iter() {
             if !is_piece_placeholder(*piece) {

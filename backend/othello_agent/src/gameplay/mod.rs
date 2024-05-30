@@ -4,6 +4,8 @@ pub mod encoding;
 
 pub mod constants;
 
-pub mod types;
-
 pub mod recommender;
+
+pub mod position;
+
+pub mod game;

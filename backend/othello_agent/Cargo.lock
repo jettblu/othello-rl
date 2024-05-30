@@ -1870,7 +1870,9 @@ name = "othello-agent"
 version = "0.1.2"
 dependencies = [
  "burn",
+ "csv",
  "rand",
+ "serde",
 ]
 
 [[package]]

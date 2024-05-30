@@ -1,5 +1,5 @@
 [package]
-name = "othello-agent"
+name = "othello_agent"
 version = "0.1.2"
 edition = "2021"
 description = "A simple Othello library. Contains useful methods for interacting with the game and creating autonomous Othello agents."
@@ -11,4 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 rand = "0.8.5"
+serde = { version = "1.0.130", features = ["derive"] }
 burn = { version = "0.12.1", features=["train", "wgpu"]}
+csv = "1.1.6"
+rl_examples = "0.1.0"

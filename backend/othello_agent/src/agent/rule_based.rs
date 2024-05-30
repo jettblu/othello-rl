@@ -1,8 +1,7 @@
-use crate::gameplay::{
-    types::{ IPlayer, IBoard, IPosition },
-    recommender::suggest_moves_rules_based,
-};
+use crate::gameplay::game::{ IBoard, IPlayer };
+use crate::gameplay::position::IPosition;
 use crate::agent::traits::Agent;
+use crate::gameplay::recommender::suggest_moves_rules_based;
 
 pub struct RuleAgent {
     player: IPlayer,
