@@ -1,6 +1,7 @@
 use rl_examples::environment::Environment;
 
 use crate::{
+    agent,
     gameplay::{ game::IGame, position::IPosition },
     simulate::history::{ GameHistory, GameHistoryStore },
 };
@@ -13,19 +14,25 @@ enum OthelloPlayerType {
 
 struct OthelloPlayer {
     id: String,
+    turn_id: i8,
     score: i16,
     player_type: OthelloPlayerType,
     has_move: bool,
 }
 
 impl OthelloPlayer {
-    pub fn new(id: String, player_type: OthelloPlayerType) -> Self {
+    pub fn new(id: String, turn_id: i8, player_type: OthelloPlayerType) -> Self {
         OthelloPlayer {
             id,
+            turn_id,
             score: 0,
             player_type,
             has_move: true,
         }
+    }
+
+    pub fn set_turn_id(&mut self, turn_id: i8) {
+        self.turn_id = turn_id;
     }
 }
 
@@ -40,14 +47,20 @@ pub struct OthelloEnvironment {
 
 impl OthelloEnvironment {
     pub fn new() -> Self {
-        OthelloEnvironment {
-            player_a: OthelloPlayer::new("Player A".to_string(), OthelloPlayerType::RL),
-            player_b: OthelloPlayer::new("Player B".to_string(), OthelloPlayerType::Rules),
+        let mut new_env = OthelloEnvironment {
+            player_a: OthelloPlayer::new("Player A".to_string(), 0, OthelloPlayerType::RL),
+            player_b: OthelloPlayer::new("Player B".to_string(), 1, OthelloPlayerType::Rules),
             player_a_starts: true,
             game: IGame::new(),
             history_store: GameHistoryStore::new(),
             current_game_history: GameHistory::new(),
+        };
+        if new_env.player_a_starts {
+            new_env.player_a.set_turn_id(0);
+        } else {
+            new_env.player_b.set_turn_id(0);
         }
+        new_env
     }
 }
 
@@ -58,6 +71,11 @@ impl Environment for OthelloEnvironment {
         self.player_b.has_move = false;
         // make random player start
         self.player_a_starts = rand::random();
+        if self.player_a_starts {
+            self.player_a.set_turn_id(1);
+        } else {
+            self.player_b.set_turn_id(1);
+        }
     }
 
     fn get_state(&self) -> String {
@@ -103,8 +121,8 @@ impl Environment for OthelloEnvironment {
         self.game.make_move_at_position(position);
         self.current_game_history.add_board(self.game.board, true);
         // check if either player has move
-        self.player_a.has_move = self.game.player_has_move(0);
-        self.player_b.has_move = self.game.player_has_move(1);
+        self.player_a.has_move = self.game.player_has_move(self.player_a.turn_id as u8);
+        self.player_b.has_move = self.game.player_has_move(self.player_b.turn_id as u8);
         // game is over if no player has move
         if !self.player_a.has_move && !self.player_b.has_move {
             // check scores for each player
