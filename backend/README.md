@@ -11,7 +11,11 @@ cargo run -p othello_agent --bin environment
 ```
 
 ```bash
-cargo run -p othello_agent --bin data
+cargo run -p othello_agent --bin data_generate
+```
+
+```bash
+cargo run -p othello_agent --bin data_split 0.8
 ```
 
 # Othello Server
