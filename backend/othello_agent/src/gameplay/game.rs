@@ -17,6 +17,8 @@ pub type IPlayer = u8;
 
 pub type IBoard = [[IPiece; 8]; 8];
 
+pub type IBoardForML = [[f32; 8]; 8];
+
 pub struct IGame {
     pub board: IBoard,
     pub last_piece: IPiece,
@@ -63,7 +65,7 @@ impl IGame {
     /// # Panics
     ///
     /// Panics if the move is invalid.
-    pub fn make_move_at_position(&mut self, position: IPosition) {
+    pub fn make_move_at_position(&mut self, position: &IPosition) {
         let flippeable_positions = flippable_pieces(self.board, &position, self.turn);
         if flippeable_positions.len() == 0 {
             panic!("Invalid move");

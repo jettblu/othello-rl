@@ -1,7 +1,6 @@
 use rl_examples::environment::Environment;
 
 use crate::{
-    agent,
     gameplay::{ game::IGame, position::IPosition },
     simulate::history::{ GameHistory, GameHistoryStore },
 };
@@ -62,6 +61,9 @@ impl OthelloEnvironment {
         }
         new_env
     }
+    pub fn get_game_history(self) -> GameHistory {
+        self.current_game_history
+    }
 }
 
 impl Environment for OthelloEnvironment {
@@ -118,8 +120,9 @@ impl Environment for OthelloEnvironment {
             );
         }
         let position = position.unwrap();
-        self.game.make_move_at_position(position);
-        self.current_game_history.add_board(self.game.board, true);
+        self.game.make_move_at_position(&position);
+        let move_index = position.to_piece_index();
+        self.current_game_history.add_board(self.game.board, move_index, false);
         // check if either player has move
         self.player_a.has_move = self.game.player_has_move(self.player_a.turn_id as u8);
         self.player_b.has_move = self.game.player_has_move(self.player_b.turn_id as u8);
@@ -128,6 +131,8 @@ impl Environment for OthelloEnvironment {
             // check scores for each player
             let agenta_score = self.game.score_for_player(0);
             let agentb_score = self.game.score_for_player(1);
+            // set scores in game history
+            self.current_game_history.set_scores(agenta_score, agentb_score);
             // return reward based on scores
             if agenta_score > agentb_score {
                 // player a wins

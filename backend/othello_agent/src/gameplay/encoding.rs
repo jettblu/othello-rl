@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::gameplay::constants::INITIAL_BOARD;
 
-use super::game::IBoard;
+use super::game::{ IBoard, IBoardForML };
 
 ///
 ///
@@ -77,6 +77,31 @@ pub fn board_from_string(s: &str, code_char_hash: &HashMap<char, u8>) -> IBoard 
     board.truncate(64);
     // convert to 2d array
     let mut board_formatted: IBoard = INITIAL_BOARD;
+    for (i, &x) in board.iter().enumerate() {
+        board_formatted[i / 8][i % 8] = x;
+    }
+    board_formatted
+}
+
+pub fn board_floats_from_string(s: &str, code_char_hash: &HashMap<char, u8>) -> IBoardForML {
+    let mut board: Vec<f32> = s
+        .chars()
+        .flat_map(|x| {
+            let sum = 27 + *code_char_hash.get(&x).unwrap();
+            let mut base_3_string = format_radix(sum as u32, 3);
+            // clear whitespace
+            base_3_string.retain(|c| !c.is_whitespace());
+            // slice the last 3 characters
+            base_3_string = base_3_string[base_3_string.len() - 3..].to_string();
+            base_3_string
+                .chars()
+                .map(|c| c.to_digit(10).unwrap() as f32)
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    board.truncate(64);
+    // convert to 2d array
+    let mut board_formatted: IBoardForML = [[0.0; 8]; 8];
     for (i, &x) in board.iter().enumerate() {
         board_formatted[i / 8][i % 8] = x;
     }

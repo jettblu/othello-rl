@@ -16,3 +16,4 @@ mod tests {
 pub mod gameplay;
 pub mod agent;
 pub mod simulate;
+pub mod model;
