@@ -2,7 +2,7 @@ use rl_examples::environment::Environment;
 use serde::Deserialize;
 
 use crate::{
-    gameplay::{ game::IGame, position::IPosition },
+    gameplay::position::IPosition,
     simulate::{ environment::OthelloEnvironment, history::{ GameHistory, GameHistoryStore } },
 };
 

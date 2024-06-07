@@ -1,22 +1,24 @@
-use rl_examples::environment::Environment;
+use rl_examples::{ environment::Environment, environments::blackjack::Player };
 
 use crate::{
-    gameplay::{ game::IGame, position::IPosition },
+    gameplay::{ game::{ IGame, IPlayer }, position::IPosition },
     simulate::history::{ GameHistory, GameHistoryStore },
 };
 
+#[derive(Clone, Debug)]
 enum OthelloPlayerType {
     Human,
     RL,
     Rules,
 }
 
-struct OthelloPlayer {
-    id: String,
-    turn_id: i8,
-    score: i16,
-    player_type: OthelloPlayerType,
-    has_move: bool,
+#[derive(Debug)]
+pub struct OthelloPlayer {
+    pub id: String,
+    pub turn_id: i8,
+    pub score: i16,
+    pub player_type: OthelloPlayerType,
+    pub has_move: bool,
 }
 
 impl OthelloPlayer {
@@ -32,6 +34,16 @@ impl OthelloPlayer {
 
     pub fn set_turn_id(&mut self, turn_id: i8) {
         self.turn_id = turn_id;
+    }
+
+    pub fn duplicate(&self) -> OthelloPlayer {
+        OthelloPlayer {
+            id: self.id.clone(),
+            turn_id: self.turn_id,
+            score: self.score,
+            player_type: self.player_type.clone(),
+            has_move: self.has_move,
+        }
     }
 }
 
@@ -63,6 +75,18 @@ impl OthelloEnvironment {
     }
     pub fn get_game_history(self) -> GameHistory {
         self.current_game_history
+    }
+
+    pub fn get_player_a(&self) -> OthelloPlayer {
+        self.player_a.duplicate()
+    }
+
+    pub fn get_current_turn_id(&self) -> u8 {
+        self.game.turn
+    }
+
+    pub fn get_player_b(&self) -> OthelloPlayer {
+        self.player_b.duplicate()
     }
 }
 
@@ -106,13 +130,6 @@ impl Environment for OthelloEnvironment {
         if !self.player_a.has_move && !self.player_b.has_move {
             panic!("Game is over. No player has move");
         }
-        // toggle turn if current player has no move
-        if self.game.turn == 0 && !self.player_a.has_move {
-            self.game.toggle_turn();
-        }
-        if self.game.turn == 1 && !self.player_b.has_move {
-            self.game.toggle_turn();
-        }
         let position = IPosition::position_from_piece_index(action as i8);
         if position.is_none() {
             panic!(
@@ -123,9 +140,18 @@ impl Environment for OthelloEnvironment {
         self.game.make_move_at_position(&position);
         let move_index = position.to_piece_index();
         self.current_game_history.add_board(self.game.board, move_index, false);
+        // SET UP FOR NEXT ROUNDs
         // check if either player has move
         self.player_a.has_move = self.game.player_has_move(self.player_a.turn_id as u8);
         self.player_b.has_move = self.game.player_has_move(self.player_b.turn_id as u8);
+        // toggle turn if current player has no move
+        if self.game.turn == 0 && !self.player_a.has_move {
+            self.game.toggle_turn();
+        } else {
+            if self.game.turn == 1 && !self.player_b.has_move {
+                self.game.toggle_turn();
+            }
+        }
         // game is over if no player has move
         if !self.player_a.has_move && !self.player_b.has_move {
             // check scores for each player

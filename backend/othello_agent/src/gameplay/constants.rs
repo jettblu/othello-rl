@@ -84,9 +84,13 @@ pub const INITIAL_BOARD: IBoard = [
     [X, X, X, X, X, X, X, X],
 ];
 
-pub const DEFAULT_CORNER_SCORE: i8 = 12;
-pub const DEFAULT_EDGE_SCORE: i8 = 4;
-pub const DEFAULT_OTHER_SCORE: i8 = 1;
+pub const DEFAULT_CORNER_SCORE: i16 = 12;
+pub const DEFAULT_EDGE_SCORE: i16 = 4;
+pub const DEFAULT_OTHER_SCORE: i16 = 1;
+pub const DEFAULT_BEST_WORST_CASE_SCORE: i16 = 32727;
 
 pub const DEFAULT_BOARD_WIDTH: usize = 8;
 pub const DEFAULT_BOARD_HEIGHT: usize = 8;
+
+/// Used in case of no valid move
+pub const NULL_MOVE_INDEX: usize = 199;

@@ -17,6 +17,22 @@ pub type IPlayer = u8;
 
 pub type IBoard = [[IPiece; 8]; 8];
 
+pub fn board_to_ml_input(board: IBoard) -> IBoardForML {
+    let mut ml_input: IBoardForML = [[0.0; 8]; 8];
+    for row_index in 0..8 {
+        for col_index in 0..8 {
+            let piece = board[row_index][col_index];
+            let value = match piece {
+                0 => 1.0,
+                1 => -1.0,
+                _ => 0.0,
+            };
+            ml_input[row_index][col_index] = value;
+        }
+    }
+    ml_input
+}
+
 pub type IBoardForML = [[f32; 8]; 8];
 
 pub struct IGame {
@@ -92,7 +108,8 @@ impl IGame {
         self.turn = 1 - self.turn;
     }
 
-    pub fn score_for_player(&self, player: IPlayer) -> i8 {
+    pub fn score_for_player(&self, player: IPlayer) -> i16 {
+        println!("Getting score for player");
         let score = augmented_score_for_player(self.board, player, 1, 1, 1);
         score
     }

@@ -44,8 +44,8 @@ pub struct GameHistory {
     // total number of moves
     pub total_moves: u16,
     // scores for both players
-    pub agent0_score: i8,
-    pub agent1_score: i8,
+    pub agent0_score: i16,
+    pub agent1_score: i16,
     // id of game... should be autoincremented
     pub id: u32,
 }
@@ -62,7 +62,7 @@ impl GameHistory {
             id: rand::random(),
         }
     }
-    pub fn set_scores(&mut self, agent0_score: i8, agent1_score: i8) {
+    pub fn set_scores(&mut self, agent0_score: i16, agent1_score: i16) {
         self.agent0_score = agent0_score;
         self.agent1_score = agent1_score;
     }

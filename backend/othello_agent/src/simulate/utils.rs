@@ -7,7 +7,9 @@ pub fn split_csv_dataset(
     let mut rdr = csv::Reader::from_path(path)?;
     let mut wtr_train = csv::Writer::from_path(train_path)?;
     let mut wtr_test = csv::Writer::from_path(test_path)?;
-
+    // write header
+    wtr_train.write_record(rdr.headers()?.iter())?;
+    wtr_test.write_record(rdr.headers()?.iter())?;
     for result in rdr.records() {
         let record = result?;
         let rand: f64 = rand::random();

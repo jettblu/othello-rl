@@ -1,3 +1,5 @@
+use core::num;
+
 use burn::{
     nn::{ loss::CrossEntropyLossConfig, BatchNorm, PaddingConfig2d },
     prelude::*,
@@ -18,23 +20,28 @@ pub struct Model<B: Backend> {
     activation: nn::Gelu,
 }
 
-impl<B: Backend> Default for Model<B> {
-    fn default() -> Self {
-        let device = B::Device::default();
-        Self::new(&device)
+const NUM_CLASSES: usize = 3;
+
+#[derive(Config, Debug)]
+pub struct ModelConfig {
+    pub num_classes: usize,
+}
+
+impl ModelConfig {
+    /// Returns the initialized model.
+    pub fn init<B: Backend>(&self, device: &B::Device) -> Model<B> {
+        Model::new(device, self.num_classes)
     }
 }
 
-const NUM_CLASSES: usize = 10;
-
 impl<B: Backend> Model<B> {
-    pub fn new(device: &B::Device) -> Self {
-        let conv1 = ConvBlock::new([1, 8], [3, 3], device); // out: [Batch,8,26,26]
-        let conv2 = ConvBlock::new([8, 16], [3, 3], device); // out: [Batch,16,24x24]
-        let conv3 = ConvBlock::new([16, 24], [3, 3], device); // out: [Batch,24,22x22]
-        let hidden_size = 24 * 22 * 22;
+    pub fn new(device: &B::Device, num_classes: usize) -> Self {
+        let conv1 = ConvBlock::new([1, 8], [3, 3], device); // out: [Batch,8,6,6]
+        let conv2 = ConvBlock::new([8, 16], [3, 3], device); // out: [Batch,16,4x4]
+        let conv3 = ConvBlock::new([16, 24], [3, 3], device); // out: [Batch,24,2x2]
+        let hidden_size = 16 * 4 * 4;
         let fc1 = nn::LinearConfig::new(hidden_size, 32).with_bias(false).init(device);
-        let fc2 = nn::LinearConfig::new(32, NUM_CLASSES).with_bias(false).init(device);
+        let fc2 = nn::LinearConfig::new(32, num_classes).with_bias(false).init(device);
 
         let dropout = nn::DropoutConfig::new(0.5).init();
 
@@ -55,7 +62,7 @@ impl<B: Backend> Model<B> {
         let x = input.reshape([batch_size, 1, height, width]).detach();
         let x = self.conv1.forward(x);
         let x = self.conv2.forward(x);
-        let x = self.conv3.forward(x);
+        // let x = self.conv3.forward(x);
 
         let [batch_size, channels, height, width] = x.dims();
         let x = x.reshape([batch_size, channels * height * width]);

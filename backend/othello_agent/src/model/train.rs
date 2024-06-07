@@ -1,8 +1,8 @@
 use burn::{
-    data::{ dataloader::DataLoaderBuilder },
+    data::dataloader::DataLoaderBuilder,
     optim::{ decay::WeightDecayConfig, AdamConfig },
     prelude::*,
-    record::{ CompactRecorder, NoStdTrainingRecorder },
+    record::{ CompactRecorder, FullPrecisionSettings, NamedMpkFileRecorder, NoStdTrainingRecorder },
     tensor::backend::AutodiffBackend,
     train::{
         metric::{
@@ -19,16 +19,21 @@ use burn::{
     },
 };
 
-use super::{ batch::OthelloMoveBatcher, dataset::OthelloMovesDataset, model::Model };
+use super::{
+    batch::OthelloMoveBatcher,
+    dataset::OthelloMovesDataset,
+    model::{ Model, ModelConfig },
+};
 
-static ARTIFACT_DIR: &str = "/tmp/burn-example-mnist";
+static ARTIFACT_DIR: &str = "tmp";
 
 #[derive(Config)]
 pub struct OthelloMovesTrainingConfig {
-    #[config(default = 10)]
+    pub model: ModelConfig,
+    #[config(default = 1)]
     pub num_epochs: usize,
 
-    #[config(default = 64)]
+    #[config(default = 128)]
     pub batch_size: usize,
 
     #[config(default = 4)]
@@ -46,11 +51,15 @@ fn create_artifact_dir(artifact_dir: &str) {
     std::fs::create_dir_all(artifact_dir).ok();
 }
 
-pub fn run<B: AutodiffBackend>(device: B::Device) {
-    create_artifact_dir(ARTIFACT_DIR);
+pub fn run<B: AutodiffBackend>(device: B::Device, experiment_name: &str) {
+    let formatted_name = format!("{}/{}", ARTIFACT_DIR, experiment_name);
+    create_artifact_dir(&formatted_name);
     // Config
     let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
-    let config = OthelloMovesTrainingConfig::new(config_optimizer);
+    let model_config = ModelConfig {
+        num_classes: 3,
+    };
+    let config = OthelloMovesTrainingConfig::new(model_config, config_optimizer);
     B::seed(config.seed);
 
     // Data
@@ -69,7 +78,7 @@ pub fn run<B: AutodiffBackend>(device: B::Device) {
         .build(OthelloMovesDataset::test());
 
     // Model
-    let learner = LearnerBuilder::new(ARTIFACT_DIR)
+    let learner = LearnerBuilder::new(&formatted_name)
         .metric_train_numeric(AccuracyMetric::new())
         .metric_valid_numeric(AccuracyMetric::new())
         .metric_train_numeric(CpuUse::new())
@@ -92,13 +101,14 @@ pub fn run<B: AutodiffBackend>(device: B::Device) {
         .devices(vec![device.clone()])
         .num_epochs(config.num_epochs)
         .summary()
-        .build(Model::new(&device), config.optimizer.init(), 1e-4);
+        .build(config.model.init(&device), config.optimizer.init(), 1e-4);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 
-    config.save(format!("{ARTIFACT_DIR}/config.json").as_str()).unwrap();
-
+    config.save(format!("{formatted_name}/config.json").as_str()).unwrap();
+    // Include the model file as a reference to a byte array
+    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
     model_trained
-        .save_file(format!("{ARTIFACT_DIR}/model"), &NoStdTrainingRecorder::new())
+        .save_file(format!("{formatted_name}/model"), &recorder)
         .expect("Failed to save trained model");
 }

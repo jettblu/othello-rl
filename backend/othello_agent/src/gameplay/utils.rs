@@ -1,6 +1,10 @@
 use crate::gameplay::constants::DIRECTIONS;
 
-use super::{ game::{ IBoard, IPiece, IPlayer }, position::IPosition };
+use super::{
+    constants::DEFAULT_BEST_WORST_CASE_SCORE,
+    game::{ IBoard, IPiece, IPlayer },
+    position::IPosition,
+};
 
 /// Check whether any pieces are flipped by playing at certain position.
 pub fn flippable_pieces(board: IBoard, position: &IPosition, player: IPlayer) -> Vec<IPosition> {
@@ -64,13 +68,13 @@ pub fn flip_pieces(board: IBoard, position: &IPosition, player: u8) -> IBoard {
 pub fn augmented_score_for_player(
     board: IBoard,
     player: IPlayer,
-    corner_score: i8,
-    edge_score: i8,
-    other_score: i8
-) -> i8 {
+    corner_score: i16,
+    edge_score: i16,
+    other_score: i16
+) -> i16 {
     let mut row_index = 0;
     let mut col_index: i8 = 0;
-    let mut score: i8 = 0;
+    let mut score: i16 = 0;
     for row in board.iter() {
         for piece in row.iter() {
             if *piece == player {
@@ -172,10 +176,10 @@ pub fn worst_score_by_playing_piece_at_index(
     board: IBoard,
     position: IPosition,
     player: IPlayer,
-    corner_score: i8,
-    edge_score: i8,
-    other_score: i8
-) -> Option<i8> {
+    corner_score: i16,
+    edge_score: i16,
+    other_score: i16
+) -> Option<i16> {
     let board_new = board_by_playing_piece_at_index(board, &position, player);
     if board_new.is_none() {
         return None;
@@ -196,11 +200,11 @@ pub fn worst_score_by_playing_piece_at_index(
         other_score
     );
     // how good is this move immediately?
-    let tie_break_score: i8 = new_score - new_score_oppoenent;
+    let tie_break_score: i16 = new_score - new_score_oppoenent;
     let mut row_index = 0;
     let mut col_index: i8 = 0;
-    // max number for number type i8
-    let mut worst_case_score: i8 = 127;
+    // max number for number type i16
+    let mut worst_case_score: i16 = DEFAULT_BEST_WORST_CASE_SCORE;
     for row in board.iter() {
         for piece in row.iter() {
             if !is_piece_placeholder(*piece) {
