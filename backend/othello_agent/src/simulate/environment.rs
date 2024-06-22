@@ -73,8 +73,8 @@ impl OthelloEnvironment {
         }
         new_env
     }
-    pub fn get_game_history(self) -> GameHistory {
-        self.current_game_history
+    pub fn get_game_history(&self) -> GameHistory {
+        self.current_game_history.clone()
     }
 
     pub fn get_player_a(&self) -> OthelloPlayer {
@@ -99,8 +99,10 @@ impl Environment for OthelloEnvironment {
         self.player_a_starts = rand::random();
         if self.player_a_starts {
             self.player_a.set_turn_id(1);
+            self.player_b.set_turn_id(0);
         } else {
             self.player_b.set_turn_id(1);
+            self.player_a.set_turn_id(0);
         }
     }
 
