@@ -49,6 +49,14 @@ impl RuleAgent {
         self.last_board = board;
     }
 
+    pub fn update_player(&mut self, player: IPlayer) {
+        self.player = player;
+    }
+
+    pub fn get_player(&self) -> IPlayer {
+        self.player
+    }
+
     fn choose_from_actions(&mut self, suggested_moves: Vec<IPosition>) -> Option<IPosition> {
         if suggested_moves.len() == 0 {
             return None;

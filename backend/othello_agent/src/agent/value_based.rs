@@ -80,7 +80,7 @@ impl<B: Backend> ValueAgent<B> {
         let recommended_move = IPosition::position_from_piece_index(
             self.possible_moves[best_move_index] as i8
         );
-        println!("Max score index: {}", best_move_index);
+        // println!("Max score index: {}", best_move_index);
         if recommended_move.is_none() {
             panic!("Expected valid index when converting from possible moves to position");
         }
@@ -94,6 +94,14 @@ impl<B: Backend> ValueAgent<B> {
 
     pub fn update_board(&mut self, board: IBoard) {
         self.current_board = board;
+    }
+
+    pub fn update_player(&mut self, player: IPlayer) {
+        self.player = player;
+    }
+
+    pub fn get_player(&self) -> IPlayer {
+        self.player
     }
 
     pub fn update_possible_move_indices(&mut self, new_possible_moves: Vec<usize>) {
@@ -115,7 +123,6 @@ impl<B: Backend> ValueAgent<B> {
             "Config should exist for the model"
         );
         println!("Config loaded successfully");
-        println!("Config: {}", config);
         // Include the model file as a reference to a byte array
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
 
@@ -123,6 +130,7 @@ impl<B: Backend> ValueAgent<B> {
             .init::<B>(&device)
             .load_file(format!("{ARTIFACT_DIR}/model"), &recorder, &device)
             .expect("Model should exist");
+        println!("Model loaded successfully");
         model
     }
 }
