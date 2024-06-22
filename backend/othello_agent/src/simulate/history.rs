@@ -36,6 +36,7 @@ pub struct ObservationMoveForML {
     pub next_move_index: usize,
 }
 
+#[derive(Debug, Clone)]
 pub struct GameHistory {
     // board history.. vector of encoded boards
     pub board_history: Vec<String>,
