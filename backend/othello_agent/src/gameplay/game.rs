@@ -109,7 +109,6 @@ impl IGame {
     }
 
     pub fn score_for_player(&self, player: IPlayer) -> i16 {
-        println!("Getting score for player");
         let score = augmented_score_for_player(self.board, player, 1, 1, 1);
         score
     }
