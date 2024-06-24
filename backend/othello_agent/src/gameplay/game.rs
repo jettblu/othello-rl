@@ -7,6 +7,7 @@ use super::{
         board_by_playing_piece_at_index,
         flippable_pieces,
         is_piece_placeholder,
+        random_board,
     },
 };
 
@@ -47,6 +48,22 @@ impl IGame {
             board: INITIAL_BOARD,
             last_piece: 0,
             turn: 0,
+        }
+    }
+    pub fn random_starting_state() -> IGame {
+        let (board, last_piece, turn) = random_board();
+        IGame {
+            board,
+            last_piece,
+            turn,
+        }
+    }
+
+    pub fn from_board(board: IBoard, last_piece: IPiece, turn: IPlayer) -> IGame {
+        IGame {
+            board,
+            last_piece,
+            turn,
         }
     }
     pub fn get_valid_moves(&self, player: IPlayer) -> Vec<IPosition> {

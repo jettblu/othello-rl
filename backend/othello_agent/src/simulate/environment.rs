@@ -1,7 +1,7 @@
 use rl_examples::{ environment::Environment, environments::blackjack::Player };
 
 use crate::{
-    gameplay::{ game::{ IGame, IPlayer }, position::IPosition },
+    gameplay::{ game::{ IBoard, IGame, IPlayer }, position::IPosition, utils::random_board },
     simulate::history::{ GameHistory, GameHistoryStore },
 };
 
@@ -87,6 +87,26 @@ impl OthelloEnvironment {
 
     pub fn get_player_b(&self) -> OthelloPlayer {
         self.player_b.duplicate()
+    }
+
+    pub fn reset_with_random_board(&mut self) {
+        let (board, last_piece, turn) = random_board();
+        let new_game = IGame::from_board(board, last_piece, turn);
+        self.game = new_game;
+        self.game = IGame::from_board(board, last_piece, turn);
+        self.player_a.has_move = false;
+        self.player_b.has_move = false;
+        // make random player start
+        self.player_a_starts = rand::random();
+        let not_turn = 1 - turn;
+        // TODO: UPDATE TURN ID TO BE OF TYPE IPLAYER
+        if self.player_a_starts {
+            self.player_a.set_turn_id(turn as i8);
+            self.player_b.set_turn_id(not_turn as i8);
+        } else {
+            self.player_b.set_turn_id(turn as i8);
+            self.player_a.set_turn_id(not_turn as i8);
+        }
     }
 }
 

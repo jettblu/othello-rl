@@ -2,13 +2,32 @@ use crate::gameplay::constants::NULL_MOVE_INDEX;
 use crate::gameplay::game::{ board_to_ml_input, IBoard, IPlayer };
 use crate::gameplay::position::IPosition;
 use crate::gameplay::utils::board_by_playing_piece_at_index;
-use crate::model::model::Model;
+use crate::model::batch::OthelloMoveBatcher;
+use crate::model::dataset::OthelloMovesDataset;
+use crate::model::model::{ Model, ModelConfig };
 use crate::model::train::OthelloMovesTrainingConfig;
+use crate::simulate::history::ObservationMove;
 use burn::config::Config;
+use burn::data::dataloader::DataLoaderBuilder;
 use burn::module::Module;
-use burn::record::{ FullPrecisionSettings, NamedMpkFileRecorder };
-use burn::tensor::backend::Backend;
+use burn::optim::decay::WeightDecayConfig;
+use burn::optim::AdamConfig;
+use burn::record::{ CompactRecorder, FullPrecisionSettings, NamedMpkFileRecorder };
+use burn::tensor::backend::{ AutodiffBackend, Backend };
 use burn::tensor::{ Device, Float, Tensor };
+use burn::train::{
+    metric::{
+        store::{ Aggregate, Direction, Split },
+        AccuracyMetric,
+        CpuMemory,
+        CpuTemperature,
+        CpuUse,
+        LossMetric,
+    },
+    LearnerBuilder,
+    MetricEarlyStoppingStrategy,
+    StoppingCondition,
+};
 use rand::{ thread_rng, Rng };
 use rl_examples::agents::agent::Agent;
 
@@ -21,7 +40,7 @@ pub struct ValueAgent<B: Backend> {
     current_prob_of_win: (f32, f32, f32),
 }
 
-impl<B: Backend> ValueAgent<B> {
+impl<B: AutodiffBackend> ValueAgent<B> {
     pub fn new(player: IPlayer, board: IBoard, device: Device<B>) -> ValueAgent<B> {
         let model = ValueAgent::load_value_model(&device);
         ValueAgent {
@@ -35,6 +54,66 @@ impl<B: Backend> ValueAgent<B> {
     }
     pub fn get_win_probability(&self) -> f32 {
         if self.player == 0 { self.current_prob_of_win.0 } else { self.current_prob_of_win.1 }
+    }
+
+    pub fn train(
+        &mut self,
+        observations: Vec<ObservationMove>,
+        observartions_for_validation: Vec<ObservationMove>
+    ) {
+        let batcher_train = OthelloMoveBatcher::<B>::new(self.device.clone());
+        let batcher_valid = OthelloMoveBatcher::<B::InnerBackend>::new(self.device.clone());
+        const BATCH_SIZE: usize = 8;
+        const NUM_WORKERS: usize = 4;
+        const SEED: u64 = 42;
+        const NUM_EPOCHS: usize = 3;
+
+        // Config
+        let config_optimizer = AdamConfig::new().with_weight_decay(
+            Some(WeightDecayConfig::new(5e-5))
+        );
+        let model_config = ModelConfig {
+            num_classes: 3,
+        };
+        let config = OthelloMovesTrainingConfig::new(model_config, config_optimizer);
+        let dataloader_train = DataLoaderBuilder::new(batcher_train)
+            .batch_size(BATCH_SIZE)
+            .shuffle(SEED)
+            .num_workers(NUM_WORKERS)
+            .build(OthelloMovesDataset::from_raw_observations(observations));
+        let dataloader_test = DataLoaderBuilder::new(batcher_valid)
+            .batch_size(BATCH_SIZE)
+            .shuffle(SEED)
+            .num_workers(NUM_WORKERS)
+            .build(OthelloMovesDataset::from_raw_observations(observartions_for_validation));
+        let formatted_name = "tmp/othello_win_again_slim_training_artifacts";
+        // Model
+        let learner = LearnerBuilder::new(&formatted_name)
+            .metric_train_numeric(AccuracyMetric::new())
+            .metric_valid_numeric(AccuracyMetric::new())
+            .metric_train_numeric(CpuUse::new())
+            .metric_valid_numeric(CpuUse::new())
+            .metric_train_numeric(CpuMemory::new())
+            .metric_valid_numeric(CpuMemory::new())
+            .metric_train_numeric(CpuTemperature::new())
+            .metric_valid_numeric(CpuTemperature::new())
+            .metric_train_numeric(LossMetric::new())
+            .metric_valid_numeric(LossMetric::new())
+            .with_file_checkpointer(CompactRecorder::new())
+            .early_stopping(
+                MetricEarlyStoppingStrategy::new::<LossMetric<B>>(
+                    Aggregate::Mean,
+                    Direction::Lowest,
+                    Split::Valid,
+                    StoppingCondition::NoImprovementSince { n_epochs: 1 }
+                )
+            )
+            .devices(vec![self.device.clone()])
+            .num_epochs(NUM_EPOCHS)
+            .summary()
+            .build(config.model.init(&self.device.clone()), config.optimizer.init(), 1e-4);
+
+        let model_trained = learner.fit(dataloader_train, dataloader_test);
     }
     fn suggest_moves(&mut self, board: IBoard) -> Vec<IPosition> {
         let mut suggested_moves: Vec<IPosition> = Vec::new();
@@ -135,7 +214,7 @@ impl<B: Backend> ValueAgent<B> {
     }
 }
 
-impl<B: Backend> Agent for ValueAgent<B> {
+impl<B: AutodiffBackend> Agent for ValueAgent<B> {
     fn select_action(&mut self) -> usize {
         let suggested_moves = self.suggest_moves(self.current_board);
         let res = self.choose_from_actions(suggested_moves);

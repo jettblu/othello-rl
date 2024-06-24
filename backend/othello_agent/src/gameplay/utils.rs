@@ -97,6 +97,55 @@ pub fn augmented_score_for_player(
     score
 }
 
+pub fn random_board() -> (IBoard, IPlayer, IPlayer) {
+    let mut valid_board = false;
+    let max_retries = 100000;
+    let mut retries = 0;
+    let mut board: IBoard = [
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+    ];
+    let mut last_move: IPlayer = 0;
+    let mut player_with_turn: IPlayer = 1;
+    // TODO: FIX HOW WE GENERATE BOARD
+    // CONSIDER STARTING FROM STANDARD BOARD AND MAKING RANDOM MOVES UNTIL SOME THRESHOLD OF POINTS
+    while valid_board == false && retries < 0 {
+        for row in board.iter_mut() {
+            for piece in row.iter_mut() {
+                // randomly assign 0, 1, or 2
+                *piece = rand::random::<u8>() % 3;
+            }
+        }
+        // check if either player has a move
+        let player_0_has_move = player_has_move(board.clone(), 0);
+        let player_1_has_move = player_has_move(board.clone(), 1);
+        retries += 1;
+        if player_0_has_move && player_1_has_move {
+            // randomly assign player with turn
+            player_with_turn = rand::random::<u8>() % 2;
+            // now iterate through board to find some arbitrary last move
+            for row in board.iter() {
+                for piece in row.iter() {
+                    if *piece == 1 - player_with_turn {
+                        last_move = *piece;
+                    }
+                }
+            }
+            valid_board = true;
+        }
+    }
+    if !valid_board {
+        panic!("Could not generate a valid board after {} retries", max_retries);
+    }
+    (board, last_move, player_with_turn)
+}
+
 pub fn board_by_playing_piece_at_index(
     board: IBoard,
     position: &IPosition,

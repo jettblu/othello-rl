@@ -64,6 +64,17 @@ impl OthelloMovesDataset {
         Self::new("test")
     }
 
+    pub fn from_raw_observations(observations: Vec<ObservationMove>) -> Self {
+        let dataset = InMemDataset::new(observations);
+        let hash_map = create_code_char_hash(CODE_CHARS);
+        let converter = ConvertSamples::new(hash_map);
+        let dataset = MapperDataset::new(dataset, converter);
+
+        Self {
+            dataset,
+        }
+    }
+
     fn fetch_from_file(path: &str) -> Option<InMemDataset<ObservationMove>> {
         // Build dataset from csv with tab ('\t') delimiter
         let mut rdr = csv::ReaderBuilder::new();

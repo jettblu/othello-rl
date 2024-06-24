@@ -1,6 +1,6 @@
 use core::panic;
 
-use burn::backend::{ wgpu::WgpuDevice, Wgpu };
+use burn::backend::{ wgpu::WgpuDevice, Autodiff, Wgpu };
 use othello_agent::{
     agent::{ rule_based::RuleAgent, value_based::ValueAgent },
     gameplay::{
@@ -13,11 +13,12 @@ use rl_examples::environment::Environment;
 use rl_examples::agents::agent::Agent;
 
 // TODO: use unique id for each player that is constant throughout the game
+// TODO: start each game in random, valid state
 pub fn main() {
     let mut env: OthelloEnvironment = OthelloEnvironment::new();
     let player_b: OthelloPlayer = env.get_player_b();
     let player_a = env.get_player_a();
-    let mut value_agent: ValueAgent<Wgpu> = ValueAgent::new(
+    let mut value_agent: ValueAgent<Autodiff<Wgpu>> = ValueAgent::new(
         player_a.turn_id as u8,
         INITIAL_BOARD,
         WgpuDevice::default()
@@ -65,8 +66,8 @@ pub fn main() {
                 }
 
                 store.add_game(game_history);
-
-                env.reset();
+                // update with random board
+                env.reset_with_random_board();
                 // update turn ids for players
                 let player_b = env.get_player_b();
                 let player_a = env.get_player_a();
