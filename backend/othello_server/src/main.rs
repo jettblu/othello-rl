@@ -10,13 +10,14 @@ use actix_web::{
 };
 use actix_ws::Message;
 use futures::StreamExt;
+use rl_examples::agents::agent::Agent;
 use othello_agent::{
-    agent::{ rule_based::RuleAgent, traits::Agent },
+    agent::{ rule_based::RuleAgent },
     gameplay::{
         constants::CODE_CHARS,
         encoding::{ board_from_string, create_code_char_hash },
-        types::{ IBoard, IPlayer, IPosition },
-        utils::piece_index_from_position,
+        position::IPosition,
+        game::{ IBoard, IPlayer },
     },
 };
 use serde::{ Deserialize, Serialize };
@@ -248,8 +249,9 @@ async fn next_move_rule_based(
     let (board_str, player) = path.into_inner();
     let hash_map = create_code_char_hash(CODE_CHARS);
     let board: IBoard = board_from_string(&board_str, &hash_map);
-    let agent = RuleAgent::new(player);
-    let move_position: Option<IPosition> = agent.get_move(board);
+    let mut agent = RuleAgent::new(player, board);
+    let new_action = agent.select_action();
+    let move_position: Option<IPosition> = IPosition::position_from_piece_index(new_action as i8);
     if move_position.is_none() {
         return Ok(
             web::Json({ MoveResponse {
@@ -257,7 +259,7 @@ async fn next_move_rule_based(
                 } })
         );
     }
-    let move_index: i8 = piece_index_from_position(move_position.unwrap());
+    let move_index: i8 = move_position.unwrap().to_piece_index() as i8;
     let response = MoveResponse {
         move_index,
     };
