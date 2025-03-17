@@ -6,3 +6,6 @@
 
 # include tmp/readme.md
 !tmp/readme.md
+/target
+.shuttle*
+Secrets*.toml
