@@ -45,3 +45,7 @@ cargo run -p othello_agent --bin model_win_test
 # Othello Server
 
 Enables realtime gameplay and provides an API for gameplay requests.
+
+```bash
+cargo shuttle run --port=8001
+```
