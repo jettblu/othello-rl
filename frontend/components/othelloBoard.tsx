@@ -277,7 +277,7 @@ function OthelloBoardInner(params: IBoardParams) {
     // set up web socket connection
     let backendHost = isProd
       ? process.env.NEXT_PUBLIC_API_HOST_PROD
-      : process.env.NEXT_PUBLIC_API_HOST;
+      : process.env.NEXT_PUBLIC_API_HOST_DEV;
     const newWebsocket = new WebSocket(`${proto}://${backendHost}/ws`);
     newWebsocket.onopen = () => {
       console.log("connected");
