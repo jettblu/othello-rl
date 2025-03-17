@@ -16,10 +16,10 @@ export async function requestNextMoveFromAi(
   try {
     // convert board to string
     const board_str = stringFromBoard(board);
-    const backendUrl =
-      process.env.NEXT_PUBLIC_IS_PROD?.toLowerCase() == "true"
-        ? process.env.NEXT_PUBLIC_API_URL_PROD
-        : process.env.NEXT_PUBLIC_API_URL_DEV;
+    const is_prod = process.env.NEXT_PUBLIC_IS_PROD?.toLowerCase() == "true";
+    const backendUrl = is_prod
+      ? process.env.NEXT_PUBLIC_API_URL_PROD
+      : process.env.NEXT_PUBLIC_API_URL_DEV;
     const ruleBasedUrl =
       backendUrl + "/next_move/rule_based" + `/${board_str}/${player}`;
     const res = await fetch(ruleBasedUrl, {
