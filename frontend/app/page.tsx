@@ -1,6 +1,4 @@
-import Image from "next/image";
 import OthelloBoard from "@/components/othelloBoard";
-import store from "@/store";
 
 export default function Home() {
   return (

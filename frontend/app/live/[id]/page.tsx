@@ -1,14 +1,15 @@
 import OthelloBoard from "@/components/othelloBoard";
 
-export default function Page({ params }: { params: { id: string } }) {
-  const id = params.id;
-  let realtimeConfig = {
-    gameId: id,
-  };
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   return (
     <main className="max-w-5xl mx-auto">
       <div className="mt-6">
-        <OthelloBoard realtimeConfig={realtimeConfig} />
+        <OthelloBoard gameId={id} />
       </div>
     </main>
   );

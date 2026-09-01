@@ -1,19 +1,15 @@
-import { IBoard, IGameAttrs, IPlayer } from "@/types";
+import { IBoard, IGameAttrs, IPlayer, PlayerType } from "@/types";
 import {
   TOGGLE_PLAYERA_AI,
   TOGGLE_PLAYERB_AI,
-  SET_GAME_ATTRS,
   UPDATE_BOARD,
-  SET_PLAYERA_SCORE,
-  SET_PLAYERB_SCORE,
   RESET_GAME,
   TOGGLE_TURN,
-  SET_PLAYERA_CANPLAY,
-  SET_PLAYERB_CANPLAY,
   TOGGLE_PLAYERA_REMOTE,
   TOGGLE_PLAYERB_REMOTE,
 } from "../actions";
 import { initialBoard, initialGameConfig } from "@/constants";
+import { playerCanPlay, playerScore } from "@/helpers/gameplay";
 
 export interface IGlobalState {
   playerA: IPlayer;
@@ -22,42 +18,55 @@ export interface IGlobalState {
   gameAttrs: IGameAttrs;
 }
 
+function playerFromBoard(
+  player: IPlayer,
+  board: IBoard,
+  piece: 0 | 1,
+  type = player.type
+): IPlayer {
+  return {
+    ...player,
+    type,
+    score: playerScore(board, piece),
+    hasMove: playerCanPlay(board, piece),
+  };
+}
+
 const globalState: IGlobalState = {
-  playerA: {
-    // black/0
-    name: "Player A",
-    score: 0,
-    type: 0,
-    hasMove: true,
-  },
-  playerB: {
-    // white/1
-    name: "Player B",
-    score: 0,
-    type: 0,
-    hasMove: true,
-  },
+  playerA: playerFromBoard(
+    {
+      name: "Player A",
+      score: 0,
+      type: PlayerType.Human,
+      hasMove: true,
+    },
+    initialBoard,
+    0
+  ),
+  playerB: playerFromBoard(
+    {
+      name: "Player B",
+      score: 0,
+      type: PlayerType.Human,
+      hasMove: true,
+    },
+    initialBoard,
+    1
+  ),
   board: initialBoard,
   gameAttrs: initialGameConfig,
 };
 
-const gameReducer = (state = globalState, action: any) => {
+const gameReducer = (
+  state = globalState,
+  action: { type: string; payload?: { board: IBoard } & IGameAttrs }
+): IGlobalState => {
   switch (action.type) {
     case RESET_GAME:
       return {
         ...state,
-        playerA: {
-          ...state.playerA,
-          type: 0,
-          score: 0,
-          hasMove: true,
-        },
-        playerB: {
-          ...state.playerB,
-          score: 0,
-          type: 0,
-          hasMove: true,
-        },
+        playerA: playerFromBoard(state.playerA, initialBoard, 0, PlayerType.Human),
+        playerB: playerFromBoard(state.playerB, initialBoard, 1, PlayerType.Human),
         board: initialBoard,
         gameAttrs: initialGameConfig,
       };
@@ -67,7 +76,10 @@ const gameReducer = (state = globalState, action: any) => {
         ...state,
         playerA: {
           ...state.playerA,
-          type: state.playerA.type === 0 ? 1 : 0,
+          type:
+            state.playerA.type === PlayerType.Human
+              ? PlayerType.AI
+              : PlayerType.Human,
         },
       };
 
@@ -76,7 +88,10 @@ const gameReducer = (state = globalState, action: any) => {
         ...state,
         playerB: {
           ...state.playerB,
-          type: state.playerB.type === 0 ? 1 : 0,
+          type:
+            state.playerB.type === PlayerType.Human
+              ? PlayerType.AI
+              : PlayerType.Human,
         },
       };
 
@@ -85,7 +100,10 @@ const gameReducer = (state = globalState, action: any) => {
         ...state,
         playerA: {
           ...state.playerA,
-          type: state.playerA.type === 0 ? 2 : 0,
+          type:
+            state.playerA.type === PlayerType.Human
+              ? PlayerType.Remote
+              : PlayerType.Human,
         },
       };
 
@@ -94,7 +112,10 @@ const gameReducer = (state = globalState, action: any) => {
         ...state,
         playerB: {
           ...state.playerB,
-          type: state.playerB.type === 0 ? 2 : 0,
+          type:
+            state.playerB.type === PlayerType.Human
+              ? PlayerType.Remote
+              : PlayerType.Human,
         },
       };
 
@@ -107,56 +128,18 @@ const gameReducer = (state = globalState, action: any) => {
         },
       };
 
-    case SET_GAME_ATTRS:
-      return {
-        ...state,
-        gameAttrs: action.payload,
-      };
-
-    case SET_PLAYERA_SCORE:
-      return {
-        ...state,
-        playerA: {
-          ...state.playerA,
-          score: action.payload,
-        },
-      };
-
-    case SET_PLAYERB_SCORE:
-      return {
-        ...state,
-        playerB: {
-          ...state.playerB,
-          score: action.payload,
-        },
-      };
-
     case UPDATE_BOARD:
+      if (!action.payload) return state;
       return {
         ...state,
         board: action.payload.board,
+        playerA: playerFromBoard(state.playerA, action.payload.board, 0),
+        playerB: playerFromBoard(state.playerB, action.payload.board, 1),
         gameAttrs: {
           ...state.gameAttrs,
           boardStr: action.payload.boardStr,
           lastPieceStr: action.payload.lastPieceStr,
           turnStr: action.payload.turnStr,
-        },
-      };
-    case SET_PLAYERA_CANPLAY:
-      return {
-        ...state,
-        playerA: {
-          ...state.playerA,
-          hasMove: action.payload,
-        },
-      };
-
-    case SET_PLAYERB_CANPLAY:
-      return {
-        ...state,
-        playerB: {
-          ...state.playerB,
-          hasMove: action.payload,
         },
       };
 

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import Fathom from "@/components/metrics/Fathom";
+import Providers from "@/components/providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,13 +16,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: Readonly<{
+  children: ReactNode;
+}>) {
   return (
     <html lang="en">
       <body className={`${inter.className} px-2 bg-gray-300`}>
-        {" "}
         <Toaster
           position="top-right"
           toastOptions={{
@@ -31,7 +32,7 @@ export default function RootLayout({
             },
           }}
         />
-        {children}
+        <Providers>{children}</Providers>
         <Fathom />
       </body>
     </html>
