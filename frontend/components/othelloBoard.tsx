@@ -13,8 +13,10 @@ import {
   requestAiMove,
   requestAiValue,
   sideToMoveValueToBlackWin,
+  type AiMoveTrace,
 } from "@/helpers/aiAgent";
 import WinProbability from "./winProbability";
+import AiConsole from "./aiConsole";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
 import {
   createGameSession,
@@ -29,6 +31,7 @@ import {
   trackRemoteGameJoined,
   winnerKind,
 } from "@/helpers/analytics";
+import { CMD, MSG, flag, othelloCmd, sideName } from "@/constants/terminal";
 import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -76,14 +79,19 @@ function PlayerStatus({
   onSkip: () => void;
   onToggleAi: () => void;
 }) {
+  const side = inverted ? sideName(0) : sideName(1);
+  const color = inverted ? "text-p1" : "text-p2";
+  const pip = inverted ? "bg-p1" : "bg-p2";
   return (
     <div
-      className={`flex items-center gap-1.5 min-w-0 rounded-2xl md:rounded-full px-2.5 py-2 text-xs sm:text-base md:text-2xl ${
-        inverted ? "bg-black text-white" : "bg-white text-black"
+      className={`flex items-center gap-1.5 min-w-0 py-1 text-[11px] sm:text-sm ${color} ${
+        isToPlay ? "" : "opacity-70"
       }`}
     >
+      <span className={`size-2.5 rounded-full shrink-0 ${pip}`} />
+      <span className="text-[10px] shrink-0">{side}</span>
       <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
-        <span className="font-medium truncate">{player.name}</span>
+        <span className="truncate">{player.name}</span>
         <m.span
           key={player.score}
           className="tabular-nums shrink-0"
@@ -91,52 +99,50 @@ function PlayerStatus({
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 520, damping: 28 }}
         >
-          ({player.score})
+          {String(player.score).padStart(2, "0")}
         </m.span>
         {isToPlay && (
           <m.span
-            className="shrink-0 text-[10px] sm:text-sm font-semibold uppercase tracking-wide text-emerald-400"
+            className="shrink-0 text-[10px]"
             initial={{ opacity: 0, y: 4, scale: 0.88 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.18 }}
           >
-            <span className="sm:hidden">Play</span>
-            <span className="hidden sm:inline">To Play</span>
+            *
           </m.span>
         )}
         {showSkip && (
           <m.button
             type="button"
-            className="text-yellow-500 underline shrink-0"
+            className="text-crt-amber shrink-0 underline decoration-phosphor/40 underline-offset-2 hover:decoration-amber cursor-pointer"
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.16 }}
             onClick={onSkip}
           >
-            Skip
+            {CMD.skip}
           </m.button>
         )}
         {result && (
           <m.span
-            className="text-green-500 shrink-0"
+            className="shrink-0 text-[10px] sm:text-xs"
             initial={{ opacity: 0, scale: 0.7 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: "spring", stiffness: 380, damping: 18 }}
           >
-            {result === "winner" ? "Winner!" : "Tie!"}
+            {result === "winner" ? "win" : "tie"}
           </m.span>
         )}
       </div>
       {player.type !== PlayerType.Remote && (
-        <label className="flex items-center gap-1 shrink-0">
-          <span className={inverted ? "text-white" : "text-black"}>AI</span>
-          <input
-            type="checkbox"
-            className="form-checkbox h-5 w-5 text-green-500"
-            checked={player.type === PlayerType.AI}
-            onChange={onToggleAi}
-          />
-        </label>
+        <button
+          type="button"
+          className="shrink-0 tabular-nums text-crt-dim hover:text-crt-phosphor min-h-11 sm:min-h-0"
+          onClick={onToggleAi}
+          aria-pressed={player.type === PlayerType.AI}
+        >
+          {flag("ai", player.type === PlayerType.AI)}
+        </button>
       )}
     </div>
   );
@@ -149,7 +155,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const playerB = useSelector((state: IGlobalState) => state.playerB);
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const [loadingAiMove, setLoadingAiMove] = useState(false);
-  const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0);
+  const [lastAiTrace, setLastAiTrace] = useState<AiMoveTrace | null>(null);
   const [winHistory, setWinHistory] = useState<number[]>([]);
   const dispatch = useDispatch();
   const pathName = usePathname();
@@ -262,6 +268,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     sessionRef.current = createGameSession();
     pendingAiThinkMsRef.current = 0;
     setWinHistory([]);
+    setLastAiTrace(null);
     router.push("/");
     dispatch(resetGame());
   }, [dispatch, playerA.type, playerB.type, router]);
@@ -323,7 +330,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       if (!didAnnounceJoin.current) {
         didAnnounceJoin.current = true;
         trackRemoteGameJoined();
-        toast.success("You are player b!");
+        toast.success(MSG.seatB);
       }
     }
 
@@ -363,14 +370,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         }
         if (!didAnnounceJoin.current) {
           didAnnounceJoin.current = true;
-          toast.success("Another player has joined the game!");
+          toast.success(MSG.peerJoined);
         }
         return;
       }
       if (data.type === "peer_left" || raw.includes("Someone disconnected")) {
         didAnnounceJoin.current = false;
         setWaitingForPlayer(true);
-        toast.error("Other player disconnected");
+        toast.error(MSG.peerLeft);
         return;
       }
       if (raw.includes("you are player b")) {
@@ -388,7 +395,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     };
 
     ws.onclose = () => {
-      toast.error("Disconnected from game");
+      toast.error(MSG.remoteClosed);
     };
 
     return () => {
@@ -432,9 +439,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   }, [
     board,
     currPlayer,
-    gameAttrs.boardStr,
     gameAttrs.lastPieceStr,
-    gameAttrs.turnStr,
     gameOver,
     playerA.score,
     playerB.score,
@@ -462,17 +467,17 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       setLoadingAiMove(true);
       const start = Date.now();
       try {
-        const index = await requestAiMove(board, player, controller.signal);
-        if (controller.signal.aborted || index == null) return;
+        const trace = await requestAiMove(board, player, controller.signal);
+        if (controller.signal.aborted || trace == null || trace.index < 0) return;
         const elapsed = Date.now() - start;
         pendingAiThinkMsRef.current = elapsed;
-        setSecondsForLastAiMove(Math.round(elapsed / 10) / 100);
-        handlePieceSelectionRef.current(index, false);
+        setLastAiTrace(trace);
+        handlePieceSelectionRef.current(trace.index, false);
       } catch (err) {
         if (!controller.signal.aborted) {
           console.warn(err);
           trackAiMoveFailed();
-          toast.error("AI failed to move");
+          toast.error(MSG.mctsFailed);
         }
       } finally {
         if (!controller.signal.aborted) setLoadingAiMove(false);
@@ -527,14 +532,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     const newGameId = Math.random().toString(36).substring(2, 10);
     sessionStorage.setItem(`othello-seat-${newGameId}`, "a");
     navigator.clipboard.writeText(`${window.location.origin}/live/${newGameId}`);
-    toast.success("Copied game link to clipboard");
+    toast.success(MSG.copiedUrl);
     trackRemoteGameCreated();
     router.push(`/live/${newGameId}`);
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto h-full min-h-0 min-w-0 flex flex-col pt-3 sm:pt-4">
-      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 sm:gap-3 min-w-0 shrink-0">
+    <div className="w-full max-w-4xl mx-auto h-full min-h-0 min-w-0 flex flex-col pt-2 sm:pt-3">
+      <div className="shrink-0 pb-1">
+        <h1 className="text-xs sm:text-sm text-crt-phosphor">
+          {othelloCmd(isRemote)}
+        </h1>
+      </div>
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-x-4 min-w-0 shrink-0">
         <PlayerStatus
           player={playerA}
           inverted
@@ -579,76 +589,63 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         />
       </div>
       <WinProbability history={winHistory} />
-      <div className="flex-1 min-h-0 w-full min-w-0 my-2 sm:my-3 [container-type:size] grid place-items-center">
-        <div className="aspect-square w-[min(100cqw,100cqh)] bg-green-700 rounded-2xl p-1.5 sm:p-2.5 md:p-4 overflow-hidden">
-          <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-2 w-full h-full min-w-0">
-            {board.map((player, index) => (
-              <OthelloPiece
-                key={index}
-                pieceIndex={index}
-                playerIndex={player}
-                handlePieceSelection={handlePieceSelection}
-                wasLastMove={index === Number(gameAttrs.lastPieceStr)}
-              />
-            ))}
+      <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
+        <div className="crt-screen aspect-square w-[min(100cqw,100cqh)] overflow-hidden">
+          <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5 overflow-hidden">
+            <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0">
+              {board.map((player, index) => (
+                <OthelloPiece
+                  key={index}
+                  pieceIndex={index}
+                  playerIndex={player}
+                  handlePieceSelection={handlePieceSelection}
+                  wasLastMove={index === Number(gameAttrs.lastPieceStr)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="w-full shrink-0 flex flex-wrap items-center gap-x-5 gap-y-1 pb-1">
+      <div className="w-full shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0 text-xs sm:text-sm text-crt-dim">
         <button
           type="button"
-          className="text-left text-base sm:text-lg md:text-xl underline w-fit min-h-11 py-1.5"
+          className="text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
           onClick={handleReset}
         >
-          Reset Game
+          {CMD.reset}
         </button>
-        {loadingAiMove && (
-          <m.div
-            className="flex items-center gap-2 min-w-0"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.16 }}
-          >
-            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-green-500 shrink-0" />
-            <span className="text-sm sm:text-lg text-gray-500 truncate">
-              AI is thinking...
-            </span>
-          </m.div>
-        )}
-        {!loadingAiMove && secondsForLastAiMove > 0 && (
-          <m.span
-            className="text-sm sm:text-lg text-gray-500"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.16 }}
-          >
-            AI took {secondsForLastAiMove} seconds
-          </m.span>
-        )}
         {waitingForPlayer && (
           <m.p
-            className="text-left text-base sm:text-lg md:text-xl"
+            className="text-left"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
           >
-            Waiting for player to join...
+            {CMD.remote}
+            <span className="tui-cursor" aria-hidden />
           </m.p>
         )}
         {!waitingForPlayer && !isRemote && (
           <m.button
             type="button"
-            className="text-left text-base sm:text-lg md:text-xl underline w-fit min-h-11 py-1.5"
+            className="text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
             onClick={handleStartRemoteGame}
           >
-            Start Remote Game
+            {CMD.remote}
           </m.button>
         )}
       </div>
+      <AiConsole
+        active={
+          playerA.type === PlayerType.AI || playerB.type === PlayerType.AI
+        }
+        thinking={loadingAiMove}
+        trace={lastAiTrace}
+      />
     </div>
   );
 }

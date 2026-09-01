@@ -8,7 +8,7 @@ import {
   SET_PLAYERA_REMOTE,
   SET_PLAYERB_REMOTE,
 } from "../actions";
-import { initialBoard, initialGameConfig } from "@/constants";
+import { initialBoard, initialGameConfig, PLAYER_NAMES } from "@/constants/game";
 import { playerCanPlay, playerScore } from "@/helpers/gameplay";
 
 export interface IGlobalState {
@@ -35,7 +35,7 @@ function playerFromBoard(
 const globalState: IGlobalState = {
   playerA: playerFromBoard(
     {
-      name: "Player A",
+      name: PLAYER_NAMES[0],
       score: 0,
       type: PlayerType.Human,
       hasMove: true,
@@ -45,7 +45,7 @@ const globalState: IGlobalState = {
   ),
   playerB: playerFromBoard(
     {
-      name: "Player B",
+      name: PLAYER_NAMES[1],
       score: 0,
       type: PlayerType.Human,
       hasMove: true,

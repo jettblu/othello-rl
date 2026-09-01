@@ -4,13 +4,14 @@
 import { load, trackPageview } from "fathom-client";
 import { useEffect, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { FATHOM_DOMAINS, FATHOM_SITE_ID } from "@/constants/analytics";
 
 function TrackPageView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   useEffect(() => {
-    load("HQCRDAGJ", {
-      includedDomains: ["www.othelloverse.com", "othelloverse.com"],
+    load(FATHOM_SITE_ID, {
+      includedDomains: [...FATHOM_DOMAINS],
     });
   }, []);
 

@@ -1,12 +1,17 @@
+import type { CSSProperties, ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
-import { Inter } from "next/font/google";
+import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "react-hot-toast";
+import CrtToaster from "@/components/crtToaster";
 import Fathom from "@/components/metrics/Fathom";
 import Providers from "@/components/providers";
+import { PALETTE, PALETTE_CSS_VARS } from "@/constants/palette";
 
-const inter = Inter({ subsets: ["latin"] });
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+});
 
 export const metadata: Metadata = {
   title: "Othello",
@@ -17,6 +22,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: PALETTE.ink,
 };
 
 export default function RootLayout({
@@ -25,25 +31,15 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-dvh overflow-hidden">
+    <html
+      lang="en"
+      className={`h-dvh overflow-hidden ${plexMono.variable}`}
+      style={PALETTE_CSS_VARS as CSSProperties}
+    >
       <body
-        className={`${inter.className} h-full bg-zinc-800 text-zinc-100 overflow-hidden px-3 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
+        className={`${plexMono.className} h-full bg-crt-bg text-crt-dim overflow-hidden px-3 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
       >
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              border: "1px solid #713200",
-              padding: "12px 16px",
-              color: "#713200",
-              maxWidth: "calc(100vw - 1.5rem)",
-            },
-          }}
-          containerStyle={{
-            top: 16,
-            right: 12,
-          }}
-        />
+        <CrtToaster />
         <Providers>{children}</Providers>
         <Fathom />
       </body>

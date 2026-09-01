@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import * as m from "motion/react-m";
+import { pWinLine } from "@/constants/terminal";
 
 const WIDTH = 200;
 const HEIGHT = 72;
@@ -30,7 +31,6 @@ function DualSpark({
   const last = Math.max(values.length - 1, 0);
   const pNow = values[values.length - 1] ?? 0.5;
   const pAt = cursor == null ? pNow : values[cursor];
-  const xNow = last === 0 ? WIDTH : WIDTH;
   const xAt = last === 0 ? WIDTH : ((cursor ?? last) / last) * WIDTH;
 
   function indexFromClientX(clientX: number) {
@@ -41,7 +41,7 @@ function DualSpark({
   }
 
   return (
-    <div className="relative h-14 sm:h-16 w-full min-w-0">
+    <div className="relative h-9 sm:h-11 w-full min-w-0">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -64,7 +64,7 @@ function DualSpark({
           stroke="currentColor"
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
-          className="text-zinc-600"
+          className="text-crt-line"
         />
         {values.length > 0 && (
           <>
@@ -80,7 +80,7 @@ function DualSpark({
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
-              className="text-zinc-400"
+              className="text-p1"
             />
             <path
               d={
@@ -94,7 +94,7 @@ function DualSpark({
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
-              className="text-zinc-100"
+              className="text-p2"
             />
           </>
         )}
@@ -105,24 +105,24 @@ function DualSpark({
             stroke="currentColor"
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
-            className="text-zinc-200"
+            className="text-crt-line"
           />
         )}
       </svg>
       {values.length > 0 && (
         <>
           <span
-            className="absolute size-2 rounded-full bg-zinc-400 ring-1 ring-zinc-800 pointer-events-none"
+            className="absolute size-2 rounded-full bg-p1 ring-1 ring-ink pointer-events-none"
             style={{
-              left: `${(xNow / WIDTH) * 100}%`,
+              left: "100%",
               top: `${(1 - pNow) * 100}%`,
               transform: "translate(-50%, -50%)",
             }}
           />
           <span
-            className="absolute size-2 rounded-full bg-zinc-100 ring-1 ring-zinc-800 pointer-events-none"
+            className="absolute size-2 rounded-full bg-p2 ring-1 ring-ink pointer-events-none"
             style={{
-              left: `${(xNow / WIDTH) * 100}%`,
+              left: "100%",
               top: `${pNow * 100}%`,
               transform: "translate(-50%, -50%)",
             }}
@@ -130,7 +130,7 @@ function DualSpark({
           {cursor != null && (
             <>
               <span
-                className="absolute size-1.5 rounded-full bg-zinc-400 ring-1 ring-zinc-800 pointer-events-none"
+                className="absolute size-1.5 rounded-full bg-p1 ring-1 ring-ink pointer-events-none"
                 style={{
                   left: `${(xAt / WIDTH) * 100}%`,
                   top: `${(1 - pAt) * 100}%`,
@@ -138,7 +138,7 @@ function DualSpark({
                 }}
               />
               <span
-                className="absolute size-1.5 rounded-full bg-zinc-100 ring-1 ring-zinc-800 pointer-events-none"
+                className="absolute size-1.5 rounded-full bg-p2 ring-1 ring-ink pointer-events-none"
                 style={{
                   left: `${(xAt / WIDTH) * 100}%`,
                   top: `${pAt * 100}%`,
@@ -162,7 +162,7 @@ function Odds({ value }: { value: number | null }) {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.16 }}
     >
-      {value == null ? "…" : `${value}%`}
+      {value == null ? ".." : `${value}%`}
     </m.span>
   );
 }
@@ -175,26 +175,26 @@ export default function WinProbability({ history }: { history: number[] }) {
 
   return (
     <div
-      className="flex flex-col gap-1 min-w-0 px-0.5 py-1 text-sm sm:text-lg text-zinc-300"
+      className="mt-1.5 sm:mt-2 min-w-0 text-[11px] sm:text-xs text-crt-dim"
       role="status"
       aria-live="polite"
       aria-label={
         pctA == null
           ? "Win probability loading"
-          : `Black win chance ${pctA} percent, white ${pctB} percent`
+          : `Green win chance ${pctA} percent, amber ${pctB} percent`
       }
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="size-2.5 rounded-full bg-black ring-1 ring-zinc-500 shrink-0" />
+        <div className="flex items-center gap-1.5 min-w-0 text-p1">
+          <span className="size-2 rounded-full bg-p1 shrink-0" />
           <Odds value={pctA} />
         </div>
-        <div className="tabular-nums text-zinc-400 text-xs sm:text-base shrink-0">
-          {pctA == null ? "…" : `${pctA}% – ${pctB}%`}
+        <div className="tabular-nums text-[10px] shrink-0">
+          {pWinLine(pctA, pctB)}
         </div>
-        <div className="flex items-center justify-end gap-1.5 min-w-0">
+        <div className="flex items-center justify-end gap-1.5 min-w-0 text-p2">
           <Odds value={pctB} />
-          <span className="size-2.5 rounded-full bg-white ring-1 ring-zinc-500 shrink-0" />
+          <span className="size-2 rounded-full bg-p2 shrink-0" />
         </div>
       </div>
       <DualSpark values={history} cursor={cursor} onCursor={setCursor} />

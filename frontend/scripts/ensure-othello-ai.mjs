@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const versionFile = readFileSync(
-  join(frontendRoot, "helpers/aiAssetVersion.ts"),
+  join(frontendRoot, "constants/ai.ts"),
   "utf8"
 );
 const version = versionFile.match(/AI_ASSET_VERSION = "([^"]+)"/)?.[1];
 if (!version) {
-  console.error("AI_ASSET_VERSION not found in helpers/aiAssetVersion.ts");
+  console.error("AI_ASSET_VERSION not found in constants/ai.ts");
   process.exit(1);
 }
 

@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const versionFile = readFileSync(
-  join(frontendRoot, "helpers/aiAssetVersion.ts"),
+  join(frontendRoot, "constants/ai.ts"),
   "utf8"
 );
 const version = versionFile.match(/AI_ASSET_VERSION = "([^"]+)"/)?.[1];
 if (!version) {
-  throw new Error("AI_ASSET_VERSION not found in helpers/aiAssetVersion.ts");
+  throw new Error("AI_ASSET_VERSION not found in constants/ai.ts");
 }
 
 const pkg = join(frontendRoot, "crates/othello-ai/pkg");

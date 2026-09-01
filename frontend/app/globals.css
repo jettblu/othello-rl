@@ -2,12 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fallback tokens; html also applies constants/palette.ts from layout. */
+:root {
+  --ink: #0c100d;
+  --phosphor: #9ade6c;
+  --amber: #e6a23c;
+  --felt: #17351c;
+  --felt-mid: #0f1c12;
+  --felt-deep: #0a120c;
+  --bezel: #1c2a1e;
+  --bezel-outer: #0e130f;
+  --crt-dim: #5d7a52;
+  --crt-line: #314833;
+  --halo: #efe6d0;
+}
+
 html,
 body {
   max-width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #27272a;
+  background-color: var(--ink);
 }
 
+::selection {
+  background: color-mix(in srgb, var(--phosphor) 40%, transparent);
+  color: var(--ink);
+}
 
+.arcade-felt {
+  background:
+    radial-gradient(ellipse at 50% 28%, var(--felt) 0%, var(--felt-mid) 70%, var(--felt-deep) 100%);
+}
+
+.crt-screen {
+  background: var(--ink);
+  padding: 5px;
+  box-shadow:
+    0 0 0 1px var(--bezel),
+    0 0 0 5px var(--bezel-outer),
+    0 0 0 6px color-mix(in srgb, var(--phosphor) 28%, var(--ink)),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 0 32px color-mix(in srgb, var(--phosphor) 12%, transparent);
+}
+
+.crt-glass {
+  position: relative;
+}
+
+.crt-glass::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.07) 0px,
+      rgba(0, 0, 0, 0.07) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.32) 100%);
+}
+
+@keyframes tui-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.tui-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  margin-left: 0.15em;
+  background: var(--phosphor);
+  vertical-align: -0.1em;
+  animation: tui-blink 1.1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tui-cursor {
+    animation: none;
+  }
+}
+
+.crt-toast {
+  align-items: baseline;
+  gap: 0.5em;
+  border: 0;
+  box-shadow:
+    0 0 0 1px var(--bezel),
+    0 0 0 2px color-mix(in srgb, var(--phosphor) 42%, transparent),
+    0 0 18px color-mix(in srgb, var(--phosphor) 16%, transparent) !important;
+}
+
+.crt-toast--error {
+  box-shadow:
+    0 0 0 1px var(--bezel),
+    0 0 0 2px color-mix(in srgb, var(--amber) 50%, transparent),
+    0 0 18px color-mix(in srgb, var(--amber) 14%, transparent) !important;
+}
+
+.crt-toast__tag {
+  flex-shrink: 0;
+  color: var(--crt-dim);
+}
+
+.crt-toast--error .crt-toast__tag {
+  color: var(--amber);
+  opacity: 0.75;
+}
+
+.piece-last {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--halo) 80%, transparent),
+    0 0 8px color-mix(in srgb, var(--halo) 75%, transparent),
+    0 0 16px color-mix(in srgb, var(--halo) 40%, transparent);
+}

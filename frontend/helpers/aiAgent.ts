@@ -1,12 +1,31 @@
+import { AI_ASSET_VERSION, POSITION_CACHE_LIMIT } from "@/constants/ai";
 import { IBoard } from "@/types";
-import { AI_ASSET_VERSION } from "./aiAssetVersion";
 
-const POSITION_CACHE_LIMIT = 64;
+export type AiCandidate = {
+  sq: string;
+  idx: number;
+  n: number;
+  q: number;
+  p: number;
+};
+
+export type AiMoveTrace = {
+  index: number;
+  sims: number;
+  nodes: number;
+  root: number;
+  c: number;
+  ms: number;
+  player: 0 | 1;
+  moves: AiCandidate[];
+};
 
 type WorkerReply = {
   id: number;
   index?: number;
   value?: number;
+  ms?: number;
+  trace?: AiMoveTrace;
   error?: string;
 };
 
@@ -18,7 +37,7 @@ type Pending = {
 let worker: Worker | null = null;
 let nextId = 1;
 const inflight = new Map<number, Pending>();
-const moveCache = new Map<string, number | null>();
+const moveCache = new Map<string, AiMoveTrace>();
 const valueCache = new Map<string, number>();
 
 function getWorker() {
@@ -96,16 +115,22 @@ export function requestAiMove(
   board: IBoard,
   player: 0 | 1,
   signal?: AbortSignal
-): Promise<number | null> {
+): Promise<AiMoveTrace | null> {
   const key = cacheKey(board, player);
   const cached = moveCache.get(key);
   if (cached !== undefined) return Promise.resolve(cached);
 
   return callWorker("guided", board, player, signal).then((reply) => {
     if (!reply) return null;
-    const index = reply.index != null && reply.index >= 0 ? reply.index : null;
-    remember(moveCache, key, index);
-    return index;
+    const trace = reply.trace;
+    if (!trace || trace.index < 0) return null;
+    const resolved = {
+      ...trace,
+      ms: reply.ms ?? trace.ms,
+      player: trace.player ?? player,
+    };
+    remember(moveCache, key, resolved);
+    return resolved;
   });
 }
 

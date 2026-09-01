@@ -1,4 +1,4 @@
-import { codeCharHash, codeChars, directions, emptyTile } from "@/constants";
+import { codeCharHash, codeChars, directions, emptyTile } from "@/constants/game";
 import { IPosition, IBoard, IBoardUpdate } from "@/types";
 
 export function stringFromBoard(board: IBoard) {

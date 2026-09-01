@@ -9,10 +9,14 @@ export class OthelloAgent {
      */
     evaluate(board: Uint8Array, player: number): number;
     /**
-     * Guided PUCT search. `board` is 64 cells (0 black, 1 white, 2 empty).
+     * Guided PUCT search. `board` is 64 cells (0 green, 1 amber, 2 empty).
      * Returns a 0–63 square index, or -1 if there is no legal move.
      */
     guided(board: Uint8Array, player: number, sims: number): number;
+    /**
+     * JSON MCTS snapshot for the live console: index, sims, nodes, root, c, moves[].
+     */
+    guided_trace(board: Uint8Array, player: number, sims: number): string;
     constructor();
 }
 
@@ -23,11 +27,13 @@ export interface InitOutput {
     readonly __wbg_othelloagent_free: (a: number, b: number) => void;
     readonly othelloagent_evaluate: (a: number, b: number, c: number, d: number) => number;
     readonly othelloagent_guided: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly othelloagent_guided_trace: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly othelloagent_new: () => [number, number, number];
     readonly __wbindgen_exn_store: (a: number) => void;
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }

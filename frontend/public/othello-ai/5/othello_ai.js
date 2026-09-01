@@ -24,7 +24,7 @@ export class OthelloAgent {
         return ret;
     }
     /**
-     * Guided PUCT search. `board` is 64 cells (0 black, 1 white, 2 empty).
+     * Guided PUCT search. `board` is 64 cells (0 green, 1 amber, 2 empty).
      * Returns a 0–63 square index, or -1 if there is no legal move.
      * @param {Uint8Array} board
      * @param {number} player
@@ -36,6 +36,27 @@ export class OthelloAgent {
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.othelloagent_guided(this.__wbg_ptr, ptr0, len0, player, sims);
         return ret;
+    }
+    /**
+     * JSON MCTS snapshot for the live console: index, sims, nodes, root, c, moves[].
+     * @param {Uint8Array} board
+     * @param {number} player
+     * @param {number} sims
+     * @returns {string}
+     */
+    guided_trace(board, player, sims) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ptr0 = passArray8ToWasm0(board, wasm.__wbindgen_malloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.othelloagent_guided_trace(this.__wbg_ptr, ptr0, len0, player, sims);
+            deferred2_0 = ret[0];
+            deferred2_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
     }
     constructor() {
         const ret = wasm.othelloagent_new();

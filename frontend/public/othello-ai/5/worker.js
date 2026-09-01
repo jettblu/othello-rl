@@ -1,9 +1,8 @@
 import init, { OthelloAgent } from "./othello_ai.js";
 
 const WASM_URL = new URL("./othello_ai_bg.wasm", import.meta.url);
-const SIMS = 8;
+const SIMS = 64;
 
-/** @type {Promise<OthelloAgent> | null} */
 let agentPromise = null;
 
 function loadAgent() {
@@ -27,7 +26,16 @@ self.onmessage = async (event) => {
       self.postMessage({ id, value: agent.evaluate(cells, player) });
       return;
     }
-    self.postMessage({ id, index: agent.guided(cells, player, SIMS) });
+    const started = performance.now();
+    const raw = agent.guided_trace(cells, player, SIMS);
+    const ms = Math.round(performance.now() - started);
+    const trace = JSON.parse(raw);
+    self.postMessage({
+      id,
+      index: trace.index,
+      ms,
+      trace: { ...trace, ms, player },
+    });
   } catch (err) {
     self.postMessage({ id, error: String(err) });
   }
