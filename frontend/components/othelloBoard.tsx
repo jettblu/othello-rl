@@ -12,9 +12,9 @@ import { getApiHost, isProdEnv } from "@/helpers/requests";
 import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
+  setPlayerARemote,
+  setPlayerBRemote,
   toggleTurn,
-  toggle_PlayerA_Remote,
-  toggle_PlayerB_Remote,
   toggle_playerA_Ai,
   toggle_playerB_Ai,
   updateBoard,
@@ -132,6 +132,11 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const pathName = usePathname();
   const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
+  const handlePieceSelectionRef = useRef<
+    (pieceIndex: number, triggeredByRemote: boolean) => boolean
+  >(() => false);
+  const seatRef = useRef<"a" | "b" | null>(null);
+  const didAnnounceJoin = useRef(false);
 
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
   const isRemote = Boolean(gameId);
@@ -204,6 +209,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     ]
   );
 
+  useEffect(() => {
+    handlePieceSelectionRef.current = handlePieceSelection;
+  }, [handlePieceSelection]);
+
   const handleReset = useCallback(() => {
     router.push("/");
     dispatch(resetGame());
@@ -239,35 +248,93 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     const host = getApiHost();
     const ws = new WebSocket(`${proto}://${host}/ws`);
     socketRef.current = ws;
+    const storedSeat = sessionStorage.getItem(`othello-seat-${gameId}`);
+    if (storedSeat === "a" || storedSeat === "b") {
+      seatRef.current = storedSeat;
+    }
+
+    function rememberSeat(seat: "a" | "b") {
+      seatRef.current = seat;
+      sessionStorage.setItem(`othello-seat-${gameId}`, seat);
+    }
+
+    function applyHostSeat(occupants = 1) {
+      rememberSeat("a");
+      if (occupants >= 2) {
+        dispatch(setPlayerBRemote());
+        setWaitingForPlayer(false);
+      } else {
+        setWaitingForPlayer(true);
+      }
+    }
+
+    function applyGuestSeat() {
+      rememberSeat("b");
+      dispatch(setPlayerARemote());
+      setWaitingForPlayer(false);
+      if (!didAnnounceJoin.current) {
+        didAnnounceJoin.current = true;
+        toast.success("You are player b!");
+      }
+    }
 
     ws.onopen = () => {
       ws.send(`/join ${gameId}`);
     };
 
     ws.onmessage = (event) => {
-      const newMsg = String(event.data);
-      if (newMsg.includes("Someone joined")) {
-        ws.send("you are player b");
-        dispatch(toggle_PlayerB_Remote());
-        setWaitingForPlayer(false);
-        toast.success("Another player has joined the game!");
+      const raw = String(event.data);
+      let data: {
+        type?: string;
+        seat?: string;
+        occupants?: number;
+        move_index?: number;
+      };
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = {};
+      }
+
+      if (data.type === "joined") {
+        const seat =
+          seatRef.current ?? (data.seat === "b" ? "b" : "a");
+        if (seat === "b") applyGuestSeat();
+        else applyHostSeat(data.occupants ?? 1);
         return;
       }
-      if (newMsg.includes("Someone disconnected")) {
+      if (data.type === "peer_joined" || raw.includes("Someone joined")) {
+        if (seatRef.current === "b") {
+          setWaitingForPlayer(false);
+          return;
+        }
+        applyHostSeat(2);
+        if (raw.includes("Someone joined")) {
+          ws.send("you are player b");
+        }
+        if (!didAnnounceJoin.current) {
+          didAnnounceJoin.current = true;
+          toast.success("Another player has joined the game!");
+        }
+        return;
+      }
+      if (data.type === "peer_left" || raw.includes("Someone disconnected")) {
+        didAnnounceJoin.current = false;
         setWaitingForPlayer(true);
         toast.error("Other player disconnected");
-        handleReset();
         return;
       }
-      if (newMsg.includes("you are player b")) {
-        toast.success("You are player b!");
-        setWaitingForPlayer(false);
-        dispatch(toggle_PlayerA_Remote());
+      if (raw.includes("you are player b")) {
+        if (seatRef.current === "a") return;
+        applyGuestSeat();
         return;
       }
-      if (newMsg.includes("move_index")) {
-        const move: IRealtimeMove = JSON.parse(newMsg);
-        handlePieceSelection(move.move_index, true);
+      if (data.move_index != null || raw.includes("move_index")) {
+        const move: IRealtimeMove =
+          data.move_index != null
+            ? { move_index: data.move_index, player: 0 }
+            : JSON.parse(raw);
+        handlePieceSelectionRef.current(move.move_index, true);
       }
     };
 
@@ -280,18 +347,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       ws.close();
       socketRef.current = null;
     };
-  }, [dispatch, gameId, handlePieceSelection, handleReset]);
+  }, [dispatch, gameId]);
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
+    sessionStorage.setItem(`othello-seat-${newGameId}`, "a");
     navigator.clipboard.writeText(`${window.location.origin}/live/${newGameId}`);
     toast.success("Copied game link to clipboard");
     router.push(`/live/${newGameId}`);
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto min-w-0">
-      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 sm:gap-4 min-w-0">
+    <div className="w-full max-w-4xl mx-auto h-full min-h-0 min-w-0 flex flex-col pt-3 sm:pt-4">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 sm:gap-3 min-w-0 shrink-0">
         <PlayerStatus
           player={playerA}
           inverted
@@ -327,31 +395,33 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           onToggleAi={() => dispatch(toggle_playerB_Ai())}
         />
       </div>
-      <div className="mt-4 sm:mt-8 w-full max-w-full aspect-square bg-green-700 rounded-2xl p-1.5 sm:p-3 md:p-5 overflow-hidden">
-        <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-2 w-full h-full min-w-0">
-          {board.map((player, index) => (
-            <OthelloPiece
-              key={index}
-              pieceIndex={index}
-              playerIndex={player}
-              handlePieceSelection={handlePieceSelection}
-              wasLastMove={index === Number(gameAttrs.lastPieceStr)}
-            />
-          ))}
+      <div className="flex-1 min-h-0 w-full min-w-0 my-2 sm:my-3 [container-type:size] grid place-items-center">
+        <div className="aspect-square w-[min(100cqw,100cqh)] bg-green-700 rounded-2xl p-1.5 sm:p-2.5 md:p-4 overflow-hidden">
+          <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-2 w-full h-full min-w-0">
+            {board.map((player, index) => (
+              <OthelloPiece
+                key={index}
+                pieceIndex={index}
+                playerIndex={player}
+                handlePieceSelection={handlePieceSelection}
+                wasLastMove={index === Number(gameAttrs.lastPieceStr)}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 sm:mt-4 w-full flex flex-col gap-2">
+      <div className="w-full shrink-0 flex flex-wrap items-center gap-x-5 gap-y-1 pb-1">
         <button
           type="button"
-          className="text-left text-base sm:text-lg md:text-2xl underline w-fit min-h-11 py-2"
+          className="text-left text-base sm:text-lg md:text-xl underline w-fit min-h-11 py-1.5"
           onClick={handleReset}
         >
           Reset Game
         </button>
         {waitingForPlayer && (
           <m.p
-            className="text-left text-base sm:text-lg md:text-2xl"
+            className="text-left text-base sm:text-lg md:text-xl"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
@@ -362,7 +432,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         {!waitingForPlayer && !isRemote && (
           <m.button
             type="button"
-            className="text-left text-base sm:text-lg md:text-2xl underline w-fit min-h-11 py-2"
+            className="text-left text-base sm:text-lg md:text-xl underline w-fit min-h-11 py-1.5"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}

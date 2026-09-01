@@ -5,8 +5,8 @@ import {
   UPDATE_BOARD,
   RESET_GAME,
   TOGGLE_TURN,
-  TOGGLE_PLAYERA_REMOTE,
-  TOGGLE_PLAYERB_REMOTE,
+  SET_PLAYERA_REMOTE,
+  SET_PLAYERB_REMOTE,
 } from "../actions";
 import { initialBoard, initialGameConfig } from "@/constants";
 import { playerCanPlay, playerScore } from "@/helpers/gameplay";
@@ -95,27 +95,23 @@ const gameReducer = (
         },
       };
 
-    case TOGGLE_PLAYERA_REMOTE:
+    case SET_PLAYERA_REMOTE:
+      if (state.playerA.type === PlayerType.Remote) return state;
       return {
         ...state,
         playerA: {
           ...state.playerA,
-          type:
-            state.playerA.type === PlayerType.Human
-              ? PlayerType.Remote
-              : PlayerType.Human,
+          type: PlayerType.Remote,
         },
       };
 
-    case TOGGLE_PLAYERB_REMOTE:
+    case SET_PLAYERB_REMOTE:
+      if (state.playerB.type === PlayerType.Remote) return state;
       return {
         ...state,
         playerB: {
           ...state.playerB,
-          type:
-            state.playerB.type === PlayerType.Human
-              ? PlayerType.Remote
-              : PlayerType.Human,
+          type: PlayerType.Remote,
         },
       };
 

@@ -48,12 +48,6 @@ async fn echo_handler(
     let (chat_tx, mut chat_rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) =
         mpsc::unbounded_channel();
     users.write().await.insert(uid, chat_tx);
-    rooms
-        .write()
-        .await
-        .entry("general".to_string())
-        .or_insert(Vec::new())
-        .push(uid);
     let mut session_2 = session.clone();
     tokio::spawn(async move {
         while let Some(msg) = chat_rx.recv().await {
@@ -82,34 +76,35 @@ async fn echo_handler(
                         "/join" => {
                             if v.len() == 2 {
                                 let room = v[1].to_owned();
-                                let mut room_name_with_user: Option<String> = None;
-                                for (room_name, room_users) in rooms.write().await.iter() {
-                                    if room_users.contains(&uid) {
-                                        room_name_with_user = Some(room_name.clone());
-                                        break;
+                                leave_room(&rooms, uid).await;
+                                let occupants = {
+                                    let mut rooms_guard = rooms.write().await;
+                                    let room_users =
+                                        rooms_guard.entry(room.clone()).or_insert(Vec::new());
+                                    if !room_users.contains(&uid) {
+                                        room_users.push(uid);
                                     }
-                                }
-                                if let Some(room_name) = room_name_with_user {
-                                    if let Some(room_users) = rooms.write().await.get_mut(&room_name)
-                                    {
-                                        room_users.retain(|&x| x != uid);
-                                    }
-                                }
-                                rooms
-                                    .write()
-                                    .await
-                                    .entry(room.clone())
-                                    .or_insert(Vec::new())
-                                    .push(uid);
-
-                                broadcast_msg(
-                                    "Someone joined".to_string(),
+                                    room_users.len()
+                                };
+                                let seat = if occupants == 1 { "a" } else { "b" };
+                                send_to_user(
                                     &users,
-                                    &rooms,
                                     uid,
-                                    vec![uid],
+                                    format!(
+                                        r#"{{"type":"joined","seat":"{seat}","occupants":{occupants}}}"#
+                                    ),
                                 )
                                 .await;
+                                if occupants > 1 {
+                                    broadcast_msg(
+                                        r#"{"type":"peer_joined"}"#.to_string(),
+                                        &users,
+                                        &rooms,
+                                        uid,
+                                        vec![uid],
+                                    )
+                                    .await;
+                                }
                             } else {
                                 println!("Room name is required");
                             }
@@ -129,28 +124,49 @@ async fn echo_handler(
     if let Err(e) = tx.send(WsState::Disconnected) {
         println!("Failed to send disconnected state: {e:?}");
     }
-    let mut room_name_with_user: Option<String> = None;
-    for (room_name, room_users) in rooms.write().await.iter() {
+    if let Some(room_name) = leave_room(&rooms, uid).await {
+        broadcast_to_room(
+            &users,
+            &rooms,
+            &room_name,
+            r#"{"type":"peer_left"}"#.to_string(),
+        )
+        .await;
+    }
+    users.write().await.remove(&uid);
+    let _ = session.close(None).await;
+}
+
+async fn leave_room(rooms: &Rooms, uid: usize) -> Option<String> {
+    let mut rooms = rooms.write().await;
+    let mut left = None;
+    for (name, room_users) in rooms.iter_mut() {
         if room_users.contains(&uid) {
-            room_name_with_user = Some(room_name.clone());
+            room_users.retain(|&x| x != uid);
+            left = Some(name.clone());
             break;
         }
     }
-    if let Some(room_name) = room_name_with_user {
-        if let Some(room_users) = rooms.write().await.get_mut(&room_name) {
-            room_users.retain(|&x| x != uid);
+    left
+}
+
+async fn send_to_user(users: &Users, uid: usize, msg: String) {
+    if let Some(tx) = users.read().await.get(&uid) {
+        let _ = tx.send(Message::Text(msg.into()));
+    }
+}
+
+async fn broadcast_to_room(users: &Users, rooms: &Rooms, room_name: &str, msg: String) {
+    let room_users = {
+        let rooms = rooms.read().await;
+        rooms.get(room_name).cloned().unwrap_or_default()
+    };
+    let users = users.read().await;
+    for user_id in room_users {
+        if let Some(tx) = users.get(&user_id) {
+            let _ = tx.send(Message::Text(msg.clone().into()));
         }
     }
-    broadcast_msg(
-        "Someone disconnected".to_string(),
-        &users,
-        &rooms,
-        uid,
-        vec![uid],
-    )
-    .await;
-    users.write().await.remove(&uid);
-    let _ = session.close(None).await;
 }
 
 async fn broadcast_msg(
