@@ -10,6 +10,19 @@ import OthelloPiece from "./othelloPiece";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
 import { preloadAiAgent, requestAiMove } from "@/helpers/aiAgent";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
+import {
+  createGameSession,
+  gameModeFromPlayers,
+  recordMove,
+  trackAiMoveFailed,
+  trackAiToggled,
+  trackGameAbandoned,
+  trackGameCompleted,
+  trackGameStarted,
+  trackRemoteGameCreated,
+  trackRemoteGameJoined,
+  winnerKind,
+} from "@/helpers/analytics";
 import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -140,6 +153,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   >(() => false);
   const seatRef = useRef<"a" | "b" | null>(null);
   const didAnnounceJoin = useRef(false);
+  const sessionRef = useRef(createGameSession());
+  const pendingAiThinkMsRef = useRef(0);
 
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
   const isRemote = Boolean(gameId);
@@ -198,6 +213,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         socketRef.current?.send(JSON.stringify(move));
       }
 
+      const moverType = currentTurn === 0 ? playerA.type : playerB.type;
+      const session = sessionRef.current;
+      recordMove(
+        session,
+        moverType,
+        moverType === PlayerType.AI ? pendingAiThinkMsRef.current : 0
+      );
+      pendingAiThinkMsRef.current = 0;
+      if (!session.startedTracked) {
+        session.startedTracked = true;
+        trackGameStarted(gameModeFromPlayers(playerA.type, playerB.type));
+      }
+
       dispatch(updateBoard(res));
       return true;
     },
@@ -217,9 +245,18 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   }, [handlePieceSelection]);
 
   const handleReset = useCallback(() => {
+    const session = sessionRef.current;
+    if (session.moves > 0 && !session.completedTracked) {
+      trackGameAbandoned(
+        gameModeFromPlayers(playerA.type, playerB.type),
+        session.moves
+      );
+    }
+    sessionRef.current = createGameSession();
+    pendingAiThinkMsRef.current = 0;
     router.push("/");
     dispatch(resetGame());
-  }, [dispatch, router]);
+  }, [dispatch, playerA.type, playerB.type, router]);
 
   const handleTurnToggle = useCallback(() => {
     const nextTurn = gameAttrs.turnStr === "0" ? "1" : "0";
@@ -277,6 +314,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       setWaitingForPlayer(false);
       if (!didAnnounceJoin.current) {
         didAnnounceJoin.current = true;
+        trackRemoteGameJoined();
         toast.success("You are player b!");
       }
     }
@@ -376,11 +414,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       try {
         const index = await requestAiMove(board, player, controller.signal);
         if (controller.signal.aborted || index == null) return;
-        setSecondsForLastAiMove(Math.round((Date.now() - start) / 10) / 100);
+        const elapsed = Date.now() - start;
+        pendingAiThinkMsRef.current = elapsed;
+        setSecondsForLastAiMove(Math.round(elapsed / 10) / 100);
         handlePieceSelectionRef.current(index, false);
       } catch (err) {
         if (!controller.signal.aborted) {
           console.warn(err);
+          trackAiMoveFailed();
           toast.error("AI failed to move");
         }
       } finally {
@@ -403,11 +444,41 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerB.type,
   ]);
 
+  useEffect(() => {
+    if (!gameOver) return;
+    const session = sessionRef.current;
+    if (session.completedTracked || session.moves === 0) return;
+    session.completedTracked = true;
+    const winnerScore = Math.max(playerA.score, playerB.score);
+    const loserScore = Math.min(playerA.score, playerB.score);
+    trackGameCompleted({
+      mode: gameModeFromPlayers(playerA.type, playerB.type),
+      winner: winnerKind(
+        playerA.score,
+        playerB.score,
+        playerA.type,
+        playerB.type
+      ),
+      winnerScore,
+      loserScore,
+      totalMoves: session.moves,
+      aiMoves: session.aiMoves,
+      aiThinkMs: session.aiThinkMs,
+    });
+  }, [
+    gameOver,
+    playerA.score,
+    playerA.type,
+    playerB.score,
+    playerB.type,
+  ]);
+
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
     sessionStorage.setItem(`othello-seat-${newGameId}`, "a");
     navigator.clipboard.writeText(`${window.location.origin}/live/${newGameId}`);
     toast.success("Copied game link to clipboard");
+    trackRemoteGameCreated();
     router.push(`/live/${newGameId}`);
   }
 
@@ -431,6 +502,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           onSkip={handleTurnToggle}
           onToggleAi={() => {
             preloadAiAgent();
+            trackAiToggled(playerA.type !== PlayerType.AI);
             dispatch(toggle_playerA_Ai());
           }}
         />
@@ -451,6 +523,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           onSkip={handleTurnToggle}
           onToggleAi={() => {
             preloadAiAgent();
+            trackAiToggled(playerB.type !== PlayerType.AI);
             dispatch(toggle_playerB_Ai());
           }}
         />
