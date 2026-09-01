@@ -1,0 +1,10 @@
+**/target
+**/*.csv
+.git
+tmp
+data
+**/.DS_Store
+**/.gitignore
+othello_agent/Cargo.lock
+othello_server/Cargo.lock
+README.md

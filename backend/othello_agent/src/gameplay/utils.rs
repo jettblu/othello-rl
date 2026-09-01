@@ -298,16 +298,8 @@ mod tests {
     use crate::gameplay::{
         constants::INITIAL_BOARD,
         position::IPosition,
-        recommender::suggest_moves_rules_based,
         utils::player_has_move,
     };
-
-    #[test]
-    fn can_suggest_moves() {
-        let moves = suggest_moves_rules_based(INITIAL_BOARD, 0);
-        println!("Suggested {} moves off initial game state", moves.len());
-        assert_eq!(moves.len(), 4);
-    }
 
     #[test]
     fn can_detect_player_has_move() {

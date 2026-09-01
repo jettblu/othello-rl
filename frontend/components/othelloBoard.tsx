@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
-import { getApiHost, isProdEnv, requestNextMoveFromAi } from "@/helpers/requests";
+import { getApiHost, isProdEnv } from "@/helpers/requests";
 import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -127,8 +127,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const gameAttrs = useSelector((state: IGlobalState) => state.gameAttrs);
   const playerA = useSelector((state: IGlobalState) => state.playerA);
   const playerB = useSelector((state: IGlobalState) => state.playerB);
-  const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0);
-  const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const dispatch = useDispatch();
   const pathName = usePathname();
@@ -233,57 +231,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       );
     }
   }, [dispatch]);
-
-  useEffect(() => {
-    const isAiTurn =
-      (playerA.type === PlayerType.AI && gameAttrs.turnStr === "0") ||
-      (playerB.type === PlayerType.AI && gameAttrs.turnStr === "1");
-    if (!isAiTurn) return;
-
-    if (gameAttrs.turnStr === "0" && !playerA.hasMove) {
-      if (playerB.hasMove) handleTurnToggle();
-      return;
-    }
-    if (gameAttrs.turnStr === "1" && !playerB.hasMove) {
-      if (playerA.hasMove) handleTurnToggle();
-      return;
-    }
-
-    const controller = new AbortController();
-    const player: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
-
-    (async () => {
-      setLoadingAiMove(true);
-      const startTime = Date.now();
-      try {
-        const res = await requestNextMoveFromAi(board, player, controller.signal);
-        if (controller.signal.aborted || res.move_index == null) return;
-        const timeTaken = Date.now() - startTime;
-        if (timeTaken < 500) {
-          await new Promise((resolve) => setTimeout(resolve, 500 - timeTaken));
-        }
-        if (controller.signal.aborted) return;
-        setSecondsForLastAiMove(Math.round(timeTaken / 10) / 100);
-        handlePieceSelection(res.move_index, false);
-      } finally {
-        if (!controller.signal.aborted) setLoadingAiMove(false);
-      }
-    })();
-
-    return () => {
-      controller.abort();
-      setLoadingAiMove(false);
-    };
-  }, [
-    board,
-    gameAttrs.turnStr,
-    handlePieceSelection,
-    handleTurnToggle,
-    playerA.hasMove,
-    playerA.type,
-    playerB.hasMove,
-    playerB.type,
-  ]);
 
   useEffect(() => {
     if (!gameId) return;
@@ -395,42 +342,13 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       </div>
 
       <div className="mt-3 sm:mt-4 w-full flex flex-col gap-2">
-        <div className="w-full flex flex-row items-center gap-2 min-w-0">
-          <button
-            type="button"
-            className="text-left text-base sm:text-lg md:text-2xl underline shrink-0 min-h-11 py-2"
-            onClick={handleReset}
-          >
-            Reset Game
-          </button>
-          <div className="flex-grow min-w-0">
-            {loadingAiMove && (
-              <m.div
-                className="flex flex-row-reverse items-center gap-2"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16 }}
-              >
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-green-500 shrink-0"></div>
-                <span className="text-sm sm:text-lg text-gray-500 truncate">
-                  AI is thinking...
-                </span>
-              </m.div>
-            )}
-            {!loadingAiMove && secondsForLastAiMove > 0 && (
-              <m.div
-                className="flex flex-row-reverse"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16 }}
-              >
-                <span className="text-sm sm:text-lg text-gray-500">
-                  AI took {secondsForLastAiMove} seconds
-                </span>
-              </m.div>
-            )}
-          </div>
-        </div>
+        <button
+          type="button"
+          className="text-left text-base sm:text-lg md:text-2xl underline w-fit min-h-11 py-2"
+          onClick={handleReset}
+        >
+          Reset Game
+        </button>
         {waitingForPlayer && (
           <m.p
             className="text-left text-base sm:text-lg md:text-2xl"

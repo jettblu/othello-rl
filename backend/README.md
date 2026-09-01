@@ -44,8 +44,14 @@ cargo run -p othello_agent --bin model_win_test
 
 # Othello Server
 
-Enables realtime gameplay and provides an API for gameplay requests.
+Realtime WebSocket rooms for remote games. Binds `0.0.0.0:$PORT` (default `8001`).
 
 ```bash
-cargo shuttle run --port=8001
+cargo run -p othello_server
+```
+
+Deploy from this directory with Fly (`fly.toml` + `Dockerfile`):
+
+```bash
+fly deploy
 ```
