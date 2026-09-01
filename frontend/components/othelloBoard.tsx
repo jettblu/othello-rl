@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
+import { preloadAiAgent, requestAiMove } from "@/helpers/aiAgent";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
 import { IPlayer, PlayerType } from "@/types";
 import {
@@ -128,6 +129,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const playerA = useSelector((state: IGlobalState) => state.playerA);
   const playerB = useSelector((state: IGlobalState) => state.playerB);
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
+  const [loadingAiMove, setLoadingAiMove] = useState(false);
+  const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -349,6 +352,57 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     };
   }, [dispatch, gameId]);
 
+  useEffect(() => {
+    const isAiTurn =
+      (playerA.type === PlayerType.AI && gameAttrs.turnStr === "0") ||
+      (playerB.type === PlayerType.AI && gameAttrs.turnStr === "1");
+    if (!isAiTurn || gameOver) return;
+
+    if (gameAttrs.turnStr === "0" && !playerA.hasMove) {
+      if (playerB.hasMove) handleTurnToggle();
+      return;
+    }
+    if (gameAttrs.turnStr === "1" && !playerB.hasMove) {
+      if (playerA.hasMove) handleTurnToggle();
+      return;
+    }
+
+    const controller = new AbortController();
+    const player: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
+
+    (async () => {
+      setLoadingAiMove(true);
+      const start = Date.now();
+      try {
+        const index = await requestAiMove(board, player, controller.signal);
+        if (controller.signal.aborted || index == null) return;
+        setSecondsForLastAiMove(Math.round((Date.now() - start) / 10) / 100);
+        handlePieceSelectionRef.current(index, false);
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          console.warn(err);
+          toast.error("AI failed to move");
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoadingAiMove(false);
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      setLoadingAiMove(false);
+    };
+  }, [
+    board,
+    gameAttrs.turnStr,
+    gameOver,
+    handleTurnToggle,
+    playerA.hasMove,
+    playerA.type,
+    playerB.hasMove,
+    playerB.type,
+  ]);
+
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
     sessionStorage.setItem(`othello-seat-${newGameId}`, "a");
@@ -375,7 +429,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                 : null
           }
           onSkip={handleTurnToggle}
-          onToggleAi={() => dispatch(toggle_playerA_Ai())}
+          onToggleAi={() => {
+            preloadAiAgent();
+            dispatch(toggle_playerA_Ai());
+          }}
         />
         <PlayerStatus
           player={playerB}
@@ -392,7 +449,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                 : null
           }
           onSkip={handleTurnToggle}
-          onToggleAi={() => dispatch(toggle_playerB_Ai())}
+          onToggleAi={() => {
+            preloadAiAgent();
+            dispatch(toggle_playerB_Ai());
+          }}
         />
       </div>
       <div className="flex-1 min-h-0 w-full min-w-0 my-2 sm:my-3 [container-type:size] grid place-items-center">
@@ -419,6 +479,29 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         >
           Reset Game
         </button>
+        {loadingAiMove && (
+          <m.div
+            className="flex items-center gap-2 min-w-0"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16 }}
+          >
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-green-500 shrink-0" />
+            <span className="text-sm sm:text-lg text-gray-500 truncate">
+              AI is thinking...
+            </span>
+          </m.div>
+        )}
+        {!loadingAiMove && secondsForLastAiMove > 0 && (
+          <m.span
+            className="text-sm sm:text-lg text-gray-500"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16 }}
+          >
+            AI took {secondsForLastAiMove} seconds
+          </m.span>
+        )}
         {waitingForPlayer && (
           <m.p
             className="text-left text-base sm:text-lg md:text-xl"

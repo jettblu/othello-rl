@@ -1,0 +1,3 @@
+# wasm-pack leftovers — do not ship these. The compiled bundle must stay tracked.
+package.json
+README.md

@@ -38,3 +38,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vscode
+
+# rust / wasm-pack intermediates (the compiled public/othello-ai bundle is tracked)
+/crates/othello-ai/target
+/crates/othello-ai/pkg
