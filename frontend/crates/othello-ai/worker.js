@@ -19,12 +19,15 @@ function loadAgent() {
 loadAgent();
 
 self.onmessage = async (event) => {
-  const { id, board, player } = event.data;
+  const { id, type, board, player } = event.data;
   try {
     const agent = await loadAgent();
     const cells = board instanceof Uint8Array ? board : new Uint8Array(board);
-    const index = agent.guided(cells, player, SIMS);
-    self.postMessage({ id, index });
+    if (type === "evaluate") {
+      self.postMessage({ id, value: agent.evaluate(cells, player) });
+      return;
+    }
+    self.postMessage({ id, index: agent.guided(cells, player, SIMS) });
   } catch (err) {
     self.postMessage({ id, error: String(err) });
   }

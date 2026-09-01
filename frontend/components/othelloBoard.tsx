@@ -8,7 +8,13 @@ import toast from "react-hot-toast";
 import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
-import { preloadAiAgent, requestAiMove } from "@/helpers/aiAgent";
+import {
+  preloadAiAgent,
+  requestAiMove,
+  requestAiValue,
+  sideToMoveValueToBlackWin,
+} from "@/helpers/aiAgent";
+import WinProbability from "./winProbability";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
 import {
   createGameSession,
@@ -144,6 +150,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0);
+  const [winHistory, setWinHistory] = useState<number[]>([]);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -254,6 +261,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     }
     sessionRef.current = createGameSession();
     pendingAiThinkMsRef.current = 0;
+    setWinHistory([]);
     router.push("/");
     dispatch(resetGame());
   }, [dispatch, playerA.type, playerB.type, router]);
@@ -389,6 +397,48 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       socketRef.current = null;
     };
   }, [dispatch, gameId]);
+
+  useEffect(() => {
+    const append = (pA: number) => {
+      setWinHistory((history) =>
+        gameAttrs.lastPieceStr === "-" ? [pA] : [...history, pA]
+      );
+    };
+
+    if (gameOver) {
+      append(
+        playerA.score === playerB.score
+          ? 0.5
+          : playerA.score > playerB.score
+            ? 1
+            : 0
+      );
+      return;
+    }
+
+    const controller = new AbortController();
+    const player = currPlayer;
+    (async () => {
+      try {
+        const value = await requestAiValue(board, player, controller.signal);
+        if (controller.signal.aborted || value == null) return;
+        append(sideToMoveValueToBlackWin(value, player));
+      } catch (err) {
+        console.warn("Win probability evaluate failed", err);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [
+    board,
+    currPlayer,
+    gameAttrs.boardStr,
+    gameAttrs.lastPieceStr,
+    gameAttrs.turnStr,
+    gameOver,
+    playerA.score,
+    playerB.score,
+  ]);
 
   useEffect(() => {
     const isAiTurn =
@@ -528,6 +578,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           }}
         />
       </div>
+      <WinProbability history={winHistory} />
       <div className="flex-1 min-h-0 w-full min-w-0 my-2 sm:my-3 [container-type:size] grid place-items-center">
         <div className="aspect-square w-[min(100cqw,100cqh)] bg-green-700 rounded-2xl p-1.5 sm:p-2.5 md:p-4 overflow-hidden">
           <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-2 w-full h-full min-w-0">

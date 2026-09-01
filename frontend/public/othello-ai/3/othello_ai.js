@@ -12,6 +12,18 @@ export class OthelloAgent {
         wasm.__wbg_othelloagent_free(ptr, 0);
     }
     /**
+     * Value head for the side to move, in `[-1, 1]`.
+     * @param {Uint8Array} board
+     * @param {number} player
+     * @returns {number}
+     */
+    evaluate(board, player) {
+        const ptr0 = passArray8ToWasm0(board, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.othelloagent_evaluate(this.__wbg_ptr, ptr0, len0, player);
+        return ret;
+    }
+    /**
      * Guided PUCT search. `board` is 64 cells (0 black, 1 white, 2 empty).
      * Returns a 0–63 square index, or -1 if there is no legal move.
      * @param {Uint8Array} board

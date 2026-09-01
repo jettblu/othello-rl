@@ -30,7 +30,7 @@ export default function RootLayout({
         className={`${inter.className} h-full bg-zinc-800 text-zinc-100 overflow-hidden px-3 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
       >
         <Toaster
-          position="bottom-center"
+          position="top-right"
           toastOptions={{
             style: {
               border: "1px solid #713200",
@@ -40,8 +40,8 @@ export default function RootLayout({
             },
           }}
           containerStyle={{
-            bottom: 16,
-            insetInline: 12,
+            top: 16,
+            right: 12,
           }}
         />
         <Providers>{children}</Providers>

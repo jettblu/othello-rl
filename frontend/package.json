@@ -7,7 +7,7 @@
     "build": "node scripts/ensure-othello-ai.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
-    "build:wasm": "cd crates/othello-ai && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --target web --out-dir pkg --out-name othello_ai && cp pkg/othello_ai.js pkg/othello_ai_bg.wasm pkg/othello_ai.d.ts ../../public/othello-ai/"
+    "build:wasm": "cd crates/othello-ai && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --target web --out-dir pkg --out-name othello_ai && node ../../scripts/publish-othello-ai.mjs"
   },
   "dependencies": {
     "fathom-client": "^3.6.0",

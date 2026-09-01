@@ -5,6 +5,10 @@ export class OthelloAgent {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Value head for the side to move, in `[-1, 1]`.
+     */
+    evaluate(board: Uint8Array, player: number): number;
+    /**
      * Guided PUCT search. `board` is 64 cells (0 black, 1 white, 2 empty).
      * Returns a 0–63 square index, or -1 if there is no legal move.
      */
@@ -17,6 +21,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_othelloagent_free: (a: number, b: number) => void;
+    readonly othelloagent_evaluate: (a: number, b: number, c: number, d: number) => number;
     readonly othelloagent_guided: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly othelloagent_new: () => [number, number, number];
     readonly __wbindgen_exn_store: (a: number) => void;

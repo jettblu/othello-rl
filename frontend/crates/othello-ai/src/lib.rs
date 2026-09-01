@@ -14,7 +14,7 @@ const DEFAULT_SIMS: usize = 8;
 
 #[wasm_bindgen]
 pub struct OthelloAgent {
-    eval: Arc<dyn PositionEval<Othello>>,
+    inner: Arc<PolicyValueAgent<Backend>>,
     solver: MctsSolver,
 }
 
@@ -28,9 +28,18 @@ impl OthelloAgent {
             .with_rollout_leaves()
             .with_play_pruning();
         Ok(Self {
-            eval: Arc::new(agent),
+            inner: Arc::new(agent),
             solver,
         })
+    }
+
+    /// Value head for the side to move, in `[-1, 1]`.
+    #[wasm_bindgen]
+    pub fn evaluate(&self, board: &[u8], player: u8) -> f32 {
+        let Some(env) = env_from_flat(board, player) else {
+            return 0.0;
+        };
+        self.inner.predict(&env).value
     }
 
     /// Guided PUCT search. `board` is 64 cells (0 black, 1 white, 2 empty).
@@ -47,7 +56,7 @@ impl OthelloAgent {
         let mut solver = self.solver;
         solver.num_simulations = sims.max(1);
         solver
-            .search_distribution(&env, Some(Arc::clone(&self.eval)))
+            .search_distribution(&env, Some(Arc::clone(&self.inner) as _))
             .into_iter()
             .next()
             .map(|(OthelloAction::Place(row, col), _)| (row * 8 + col) as i32)
