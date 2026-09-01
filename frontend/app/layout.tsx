@@ -25,9 +25,9 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-dvh overflow-hidden">
       <body
-        className={`${inter.className} bg-gray-300 overflow-x-hidden px-3 sm:px-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
+        className={`${inter.className} h-full bg-zinc-800 text-zinc-100 overflow-hidden px-3 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
       >
         <Toaster
           position="bottom-center"
