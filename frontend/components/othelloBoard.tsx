@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as m from "motion/react-m";
 import { useDispatch, useSelector } from "react-redux";
 import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -8,7 +9,7 @@ import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
 import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
 import { getApiHost, isProdEnv, requestNextMoveFromAi } from "@/helpers/requests";
-import { PlayerType } from "@/types";
+import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
   toggleTurn,
@@ -38,10 +39,94 @@ function replaceQuery(pathname: string, updates: Record<string, string>) {
   );
 }
 
-export default function OthelloBoard({ gameId }: { gameId?: string }) {
-  const { board, gameAttrs, playerA, playerB } = useSelector(
-    (state: IGlobalState) => state
+function PlayerStatus({
+  player,
+  inverted,
+  isToPlay,
+  showSkip,
+  result,
+  onSkip,
+  onToggleAi,
+}: {
+  player: IPlayer;
+  inverted: boolean;
+  isToPlay: boolean;
+  showSkip: boolean;
+  result: "winner" | "tie" | null;
+  onSkip: () => void;
+  onToggleAi: () => void;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 min-w-0 rounded-2xl md:rounded-full px-2.5 py-2 text-xs sm:text-base md:text-2xl ${
+        inverted ? "bg-black text-white" : "bg-white text-black"
+      }`}
+    >
+      <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
+        <span className="font-medium truncate">{player.name}</span>
+        <m.span
+          key={player.score}
+          className="tabular-nums shrink-0"
+          initial={{ scale: 1.2, opacity: 0.65 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 520, damping: 28 }}
+        >
+          ({player.score})
+        </m.span>
+        {isToPlay && (
+          <m.span
+            className="shrink-0 text-[10px] sm:text-sm font-semibold uppercase tracking-wide text-emerald-400"
+            initial={{ opacity: 0, y: 4, scale: 0.88 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.18 }}
+          >
+            <span className="sm:hidden">Play</span>
+            <span className="hidden sm:inline">To Play</span>
+          </m.span>
+        )}
+        {showSkip && (
+          <m.button
+            type="button"
+            className="text-yellow-500 underline shrink-0"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16 }}
+            onClick={onSkip}
+          >
+            Skip
+          </m.button>
+        )}
+        {result && (
+          <m.span
+            className="text-green-500 shrink-0"
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 380, damping: 18 }}
+          >
+            {result === "winner" ? "Winner!" : "Tie!"}
+          </m.span>
+        )}
+      </div>
+      {player.type !== PlayerType.Remote && (
+        <label className="flex items-center gap-1 shrink-0">
+          <span className={inverted ? "text-white" : "text-black"}>AI</span>
+          <input
+            type="checkbox"
+            className="form-checkbox h-5 w-5 text-green-500"
+            checked={player.type === PlayerType.AI}
+            onChange={onToggleAi}
+          />
+        </label>
+      )}
+    </div>
   );
+}
+
+export default function OthelloBoard({ gameId }: { gameId?: string }) {
+  const board = useSelector((state: IGlobalState) => state.board);
+  const gameAttrs = useSelector((state: IGlobalState) => state.gameAttrs);
+  const playerA = useSelector((state: IGlobalState) => state.playerA);
+  const playerB = useSelector((state: IGlobalState) => state.playerB);
   const [secondsForLastAiMove, setSecondsForLastAiMove] = useState(0);
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
@@ -258,123 +343,115 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="grid grid-cols-2 h-fit max-w-4xl mx-auto gap-x-4 text-lg md:text-2xl">
-        <div className="flex flex-row bg-black text-white rounded-full px-3 py-2">
-          {playerA.name} ({playerA.score}) {currPlayer === 0 ? "To Play" : ""}
-          {!playerA.hasMove && playerB.hasMove && gameAttrs.turnStr === "0" && (
-            <p
-              className="text-yellow-500 underline hover:cursor-pointer ml-3"
-              onClick={handleTurnToggle}
-            >
-              Skip Turn
-            </p>
-          )}
-          {gameOver && playerA.score > playerB.score && (
-            <p className="text-green-500 ml-3">Winner!</p>
-          )}
-          {gameOver && playerA.score === playerB.score && (
-            <p className="text-green-500 ml-3">Tie!</p>
-          )}
-          {playerA.type !== PlayerType.Remote && (
-            <div className="flex-grow">
-              <div className="flex flex-row-reverse">
-                <input
-                  type="checkbox"
-                  className="form-checkbox h-5 w-5 text-green-500 my-auto"
-                  checked={playerA.type === PlayerType.AI}
-                  onChange={() => dispatch(toggle_playerA_Ai())}
-                />
-                <p className="text-white mr-2">AI</p>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-row bg-white rounded-full px-3 py-2">
-          {playerB.name} ({playerB.score}) {currPlayer === 1 ? "To Play" : ""}
-          {!playerB.hasMove && playerA.hasMove && gameAttrs.turnStr === "1" && (
-            <p
-              className="text-yellow-500 underline hover:cursor-pointer ml-3"
-              onClick={handleTurnToggle}
-            >
-              Skip Turn
-            </p>
-          )}
-          {gameOver && playerB.score > playerA.score && (
-            <p className="text-green-500 ml-3">Winner!</p>
-          )}
-          {gameOver && playerB.score === playerA.score && (
-            <p className="text-green-500 ml-3">Tie!</p>
-          )}
-          {playerB.type !== PlayerType.Remote && (
-            <div className="flex-grow">
-              <div className="flex flex-row-reverse">
-                <input
-                  type="checkbox"
-                  className="form-checkbox h-5 w-5 text-green-500 my-auto"
-                  checked={playerB.type === PlayerType.AI}
-                  onChange={() => dispatch(toggle_playerB_Ai())}
-                />
-                <p className="text-black mr-2">AI</p>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="w-full max-w-4xl mx-auto min-w-0">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 sm:gap-4 min-w-0">
+        <PlayerStatus
+          player={playerA}
+          inverted
+          isToPlay={currPlayer === 0}
+          showSkip={
+            !playerA.hasMove && playerB.hasMove && gameAttrs.turnStr === "0"
+          }
+          result={
+            gameOver && playerA.score > playerB.score
+              ? "winner"
+              : gameOver && playerA.score === playerB.score
+                ? "tie"
+                : null
+          }
+          onSkip={handleTurnToggle}
+          onToggleAi={() => dispatch(toggle_playerA_Ai())}
+        />
+        <PlayerStatus
+          player={playerB}
+          inverted={false}
+          isToPlay={currPlayer === 1}
+          showSkip={
+            !playerB.hasMove && playerA.hasMove && gameAttrs.turnStr === "1"
+          }
+          result={
+            gameOver && playerB.score > playerA.score
+              ? "winner"
+              : gameOver && playerB.score === playerA.score
+                ? "tie"
+                : null
+          }
+          onSkip={handleTurnToggle}
+          onToggleAi={() => dispatch(toggle_playerB_Ai())}
+        />
       </div>
-      <div className="bg-green-700 rounded-2xl grid grid-cols-8 gap-x-2 gap-y-2 mt-8 px-3 py-5">
-        {board.map((player, index) => (
-          <OthelloPiece
-            key={index}
-            pieceIndex={index}
-            playerIndex={player}
-            handlePieceSelection={handlePieceSelection}
-            wasLastMove={index === Number(gameAttrs.lastPieceStr)}
-          />
-        ))}
+      <div className="mt-4 sm:mt-8 w-full max-w-full aspect-square bg-green-700 rounded-2xl p-1.5 sm:p-3 md:p-5 overflow-hidden">
+        <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-2 w-full h-full min-w-0">
+          {board.map((player, index) => (
+            <OthelloPiece
+              key={index}
+              pieceIndex={index}
+              playerIndex={player}
+              handlePieceSelection={handlePieceSelection}
+              wasLastMove={index === Number(gameAttrs.lastPieceStr)}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="w-full flex flex-col">
-        <div className="w-full flex flex-row">
-          <p
-            className="text-left text-lg md:text-2xl underline hover:cursor-pointer"
+      <div className="mt-3 sm:mt-4 w-full flex flex-col gap-2">
+        <div className="w-full flex flex-row items-center gap-2 min-w-0">
+          <button
+            type="button"
+            className="text-left text-base sm:text-lg md:text-2xl underline shrink-0 min-h-11 py-2"
             onClick={handleReset}
           >
             Reset Game
-          </p>
-          <div className="flex-grow">
+          </button>
+          <div className="flex-grow min-w-0">
             {loadingAiMove && (
-              <div className="flex flex-row-reverse">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
-                <span className="text-lg mr-2 text-center text-gray-500">
+              <m.div
+                className="flex flex-row-reverse items-center gap-2"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16 }}
+              >
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-green-500 shrink-0"></div>
+                <span className="text-sm sm:text-lg text-gray-500 truncate">
                   AI is thinking...
                 </span>
-              </div>
+              </m.div>
             )}
             {!loadingAiMove && secondsForLastAiMove > 0 && (
-              <div className="flex flex-row-reverse">
-                <span className="text-lg mr-2 text-center text-gray-500">
+              <m.div
+                className="flex flex-row-reverse"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16 }}
+              >
+                <span className="text-sm sm:text-lg text-gray-500">
                   AI took {secondsForLastAiMove} seconds
                 </span>
-              </div>
+              </m.div>
             )}
           </div>
         </div>
         {waitingForPlayer && (
-          <div className="w-full flex flex-row">
-            <p className="text-left text-lg md:text-2xl">
-              Waiting for player to join...
-            </p>
-          </div>
+          <m.p
+            className="text-left text-base sm:text-lg md:text-2xl"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            Waiting for player to join...
+          </m.p>
         )}
         {!waitingForPlayer && !isRemote && (
-          <div className="w-full flex flex-row">
-            <p
-              className="text-left text-lg md:text-2xl underline hover:cursor-pointer"
-              onClick={handleStartRemoteGame}
-            >
-              Start Remote Game
-            </p>
-          </div>
+          <m.button
+            type="button"
+            className="text-left text-base sm:text-lg md:text-2xl underline w-fit min-h-11 py-2"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={handleStartRemoteGame}
+          >
+            Start Remote Game
+          </m.button>
         )}
       </div>
     </div>

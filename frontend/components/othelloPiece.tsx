@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import * as m from "motion/react-m";
 
 const EMPTY_COLOR = "#006e05";
 
@@ -23,25 +24,41 @@ function OthelloPiece({
   ) => boolean;
 }) {
   const [flashInvalid, setFlashInvalid] = useState(false);
+  const empty = playerIndex === 2;
 
   function onClick() {
     const success = handlePieceSelection(pieceIndex, false);
-    if (!success && playerIndex === 2) {
+    if (!success && empty) {
       setFlashInvalid(true);
-      window.setTimeout(() => setFlashInvalid(false), 500);
+      window.setTimeout(() => setFlashInvalid(false), 400);
     }
   }
 
   return (
-    <div
-      className={`text-white w-[90%] h-[40px] md:h-[90px] rounded-full hover:cursor-pointer ${
-        wasLastMove ? "ring-4 ring-gray-100/50" : ""
+    <m.button
+      type="button"
+      aria-label={`Square ${pieceIndex + 1}`}
+      className={`min-w-0 w-full h-full p-0 border-0 rounded-full appearance-none touch-manipulation ${
+        wasLastMove ? "ring-2 sm:ring-4 ring-gray-100/50" : ""
       }`}
-      style={{
-        backgroundColor: flashInvalid ? "#ff000080" : pieceColor(playerIndex),
-      }}
+      initial={false}
+      animate={flashInvalid ? { x: [0, -5, 5, -4, 4, 0] } : { x: 0 }}
+      whileHover={empty ? { scale: 1.08 } : undefined}
+      whileTap={empty ? { scale: 0.9 } : undefined}
+      transition={{ duration: 0.32 }}
       onClick={onClick}
-    />
+    >
+      <m.span
+        key={playerIndex}
+        className="block w-full h-full rounded-full"
+        style={{
+          backgroundColor: flashInvalid ? "#ff000080" : pieceColor(playerIndex),
+        }}
+        initial={empty ? { scale: 1 } : { scale: 0.55 }}
+        animate={{ scale: 1 }}
+        transition={{ duration: 0.28 }}
+      />
+    </m.button>
   );
 }
 
