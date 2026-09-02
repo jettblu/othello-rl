@@ -60,13 +60,13 @@ export default function AiConsole({
         </div>
         <button
           type="button"
-          className="shrink-0 text-crt-phosphor underline decoration-phosphor/45 underline-offset-2"
+          className="desktop-ai-difficulty shrink-0 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
           onClick={() =>
             onDifficultyChange(difficulty === "easy" ? "hard" : "easy")
           }
           aria-label={`AI difficulty ${difficulty}; activate the other level`}
         >
-          {difficulty}:{AI_SIMULATIONS[difficulty]}
+          {CMD.level} --{difficulty} ({AI_SIMULATIONS[difficulty]})
         </button>
       </div>
       {trace && !thinking && (

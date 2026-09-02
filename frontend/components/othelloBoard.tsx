@@ -53,6 +53,7 @@ interface IRealtimeMove {
 }
 
 const AI_DIFFICULTY_STORAGE_KEY = "othello-ai-difficulty";
+const DESKTOP_AI_MEDIA_QUERY = "(hover: hover) and (pointer: fine)";
 
 function replaceQuery(pathname: string, updates: Record<string, string>) {
   const params = new URLSearchParams(window.location.search);
@@ -183,16 +184,16 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
   useEffect(() => {
     const saved = localStorage.getItem(AI_DIFFICULTY_STORAGE_KEY);
-    const coarsePointer =
-      window.matchMedia?.("(pointer: coarse)").matches ?? false;
+    const desktop =
+      window.matchMedia?.(DESKTOP_AI_MEDIA_QUERY).matches ?? false;
     const lowCoreCount =
       navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
     const preferred: AiDifficulty =
-      saved === "easy" || saved === "hard"
+      desktop && (saved === "easy" || saved === "hard")
         ? saved
-        : coarsePointer || lowCoreCount
-          ? "easy"
-          : "hard";
+        : desktop && !lowCoreCount
+          ? "hard"
+          : "easy";
     aiDifficultyRef.current = preferred;
     const timeout = window.setTimeout(() => setAiDifficulty(preferred), 0);
     return () => window.clearTimeout(timeout);
@@ -499,10 +500,13 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       setLoadingAiMove(true);
       const start = Date.now();
       try {
+        const desktop =
+          window.matchMedia?.(DESKTOP_AI_MEDIA_QUERY).matches ?? false;
+        const difficulty = desktop ? aiDifficultyRef.current : "easy";
         const trace = await requestAiMove(
           board,
           player,
-          AI_SIMULATIONS[aiDifficultyRef.current],
+          AI_SIMULATIONS[difficulty],
           controller.signal
         );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;

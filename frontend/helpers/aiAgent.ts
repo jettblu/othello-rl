@@ -32,13 +32,38 @@ type WorkerReply = {
 type Pending = {
   resolve: (reply: WorkerReply) => void;
   reject: (err: Error) => void;
+  message: {
+    id: number;
+    type: "guided" | "evaluate";
+    board: Uint8Array;
+    player: 0 | 1;
+    simulations?: number;
+  };
 };
 
 let worker: Worker | null = null;
 let nextId = 1;
+let activeId: number | null = null;
 const inflight = new Map<number, Pending>();
+const requestQueue: number[] = [];
 const moveCache = new Map<string, AiMoveTrace>();
 const valueCache = new Map<string, number>();
+
+function runNextRequest() {
+  if (activeId != null) return;
+
+  let id = requestQueue.shift();
+  while (id != null && !inflight.has(id)) {
+    id = requestQueue.shift();
+  }
+  if (id == null) return;
+
+  const pending = inflight.get(id);
+  if (!pending) return;
+  activeId = id;
+  const { board, ...message } = pending.message;
+  getWorker().postMessage({ ...message, board }, [board.buffer]);
+}
 
 function getWorker() {
   if (worker) return worker;
@@ -46,16 +71,21 @@ function getWorker() {
     type: "module",
   });
   worker.onmessage = (event: MessageEvent<WorkerReply>) => {
+    if (activeId === event.data.id) activeId = null;
     const pending = inflight.get(event.data.id);
-    if (!pending) return;
-    inflight.delete(event.data.id);
-    if (event.data.error) pending.reject(new Error(event.data.error));
-    else pending.resolve(event.data);
+    if (pending) {
+      inflight.delete(event.data.id);
+      if (event.data.error) pending.reject(new Error(event.data.error));
+      else pending.resolve(event.data);
+    }
+    runNextRequest();
   };
   worker.onerror = (event) => {
     const err = new Error(event.message || "AI worker failed");
     for (const pending of inflight.values()) pending.reject(err);
     inflight.clear();
+    requestQueue.length = 0;
+    activeId = null;
     worker?.terminate();
     worker = null;
   };
@@ -85,7 +115,6 @@ function callWorker(
 
   const id = nextId++;
   const cells = Uint8Array.from(board);
-  const aiWorker = getWorker();
 
   return new Promise((resolve, reject) => {
     const finish = (reply: WorkerReply | null) => {
@@ -101,12 +130,14 @@ function callWorker(
       finish(null);
     };
 
-    inflight.set(id, { resolve: (reply) => finish(reply), reject: fail });
+    inflight.set(id, {
+      resolve: (reply) => finish(reply),
+      reject: fail,
+      message: { id, type, board: cells, player, simulations },
+    });
     signal?.addEventListener("abort", onAbort, { once: true });
-    aiWorker.postMessage(
-      { id, type, board: cells, player, simulations },
-      [cells.buffer]
-    );
+    requestQueue.push(id);
+    runNextRequest();
   });
 }
 

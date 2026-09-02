@@ -121,3 +121,13 @@ body {
     0 0 8px color-mix(in srgb, var(--halo) 75%, transparent),
     0 0 16px color-mix(in srgb, var(--halo) 40%, transparent);
 }
+
+.desktop-ai-difficulty {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .desktop-ai-difficulty {
+    display: inline-block;
+  }
+}
