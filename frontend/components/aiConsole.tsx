@@ -1,7 +1,6 @@
 "use client";
 
 import type { AiMoveTrace } from "@/helpers/aiAgent";
-import { AI_SIMULATIONS, type AiDifficulty } from "@/constants/ai";
 import { CMD, MSG, mctsCmd, playCmd, sideName } from "@/constants/terminal";
 
 function bar(share: number) {
@@ -18,14 +17,10 @@ export default function AiConsole({
   active,
   thinking,
   trace,
-  difficulty,
-  onDifficultyChange,
 }: {
   active: boolean;
   thinking: boolean;
   trace: AiMoveTrace | null;
-  difficulty: AiDifficulty;
-  onDifficultyChange: (difficulty: AiDifficulty) => void;
 }) {
   if (!active) return null;
 
@@ -53,21 +48,9 @@ export default function AiConsole({
       aria-live="polite"
       aria-label="AI search console"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 truncate text-crt-phosphor/80">
-          {header}
-          {thinking && <span className="tui-cursor" aria-hidden />}
-        </div>
-        <button
-          type="button"
-          className="desktop-ai-difficulty shrink-0 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
-          onClick={() =>
-            onDifficultyChange(difficulty === "easy" ? "hard" : "easy")
-          }
-          aria-label={`AI difficulty ${difficulty}; activate the other level`}
-        >
-          {CMD.level} --{difficulty}
-        </button>
+      <div className="min-w-0 truncate text-crt-phosphor/80">
+        {header}
+        {thinking && <span className="tui-cursor" aria-hidden />}
       </div>
       {trace && !thinking && (
         <>

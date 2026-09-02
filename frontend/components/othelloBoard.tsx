@@ -688,6 +688,20 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
             {CMD.remote}
           </m.button>
         )}
+        {(playerA.type === PlayerType.AI || playerB.type === PlayerType.AI) && (
+          <button
+            type="button"
+            className="desktop-ai-difficulty text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+            onClick={() =>
+              handleDifficultyChange(
+                aiDifficulty === "easy" ? "hard" : "easy"
+              )
+            }
+            aria-label={`AI difficulty ${aiDifficulty}; activate the other level`}
+          >
+            {CMD.level} --{aiDifficulty}
+          </button>
+        )}
       </div>
       <AiConsole
         active={
@@ -695,8 +709,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         }
         thinking={loadingAiMove}
         trace={lastAiTrace}
-        difficulty={aiDifficulty}
-        onDifficultyChange={handleDifficultyChange}
       />
     </div>
   );
