@@ -66,7 +66,7 @@ export default function AiConsole({
           }
           aria-label={`AI difficulty ${difficulty}; activate the other level`}
         >
-          {CMD.level} --{difficulty} ({AI_SIMULATIONS[difficulty]})
+          {CMD.level} --{difficulty}
         </button>
       </div>
       {trace && !thinking && (
