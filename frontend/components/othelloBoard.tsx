@@ -53,7 +53,7 @@ interface IRealtimeMove {
 }
 
 const AI_DIFFICULTY_STORAGE_KEY = "othello-ai-difficulty";
-const DESKTOP_AI_MEDIA_QUERY = "(hover: hover) and (pointer: fine)";
+const DESKTOP_AI_MEDIA_QUERY = "(min-width: 768px)";
 
 function replaceQuery(pathname: string, updates: Record<string, string>) {
   const params = new URLSearchParams(window.location.search);

@@ -126,7 +126,7 @@ body {
   display: none;
 }
 
-@media (hover: hover) and (pointer: fine) {
+@media (min-width: 768px) {
   .desktop-ai-difficulty {
     display: inline-block;
   }
