@@ -530,11 +530,20 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
+    const params = new URLSearchParams({
+      board: gameAttrs.boardStr,
+      turn: gameAttrs.turnStr,
+      lastPiece: gameAttrs.lastPieceStr,
+    });
+    const remotePath = `/live/${newGameId}?${params.toString()}`;
+    const shareUrl = new URL(remotePath, window.location.origin).toString();
     sessionStorage.setItem(`othello-seat-${newGameId}`, "a");
-    navigator.clipboard.writeText(`${window.location.origin}/live/${newGameId}`);
-    toast.success(MSG.copiedUrl);
+    void navigator.clipboard.writeText(shareUrl).then(
+      () => toast.success(MSG.copiedUrl),
+      () => toast.error(MSG.copyFailed)
+    );
     trackRemoteGameCreated();
-    router.push(`/live/${newGameId}`);
+    router.push(remotePath);
   }
 
   return (

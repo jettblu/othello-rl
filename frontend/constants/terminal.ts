@@ -50,6 +50,7 @@ export function pWinLine(pctA: number | null, pctB: number | null) {
 
 export const MSG = {
   copiedUrl: "copied url",
+  copyFailed: "copy failed",
   seatB: "seat: b",
   peerJoined: "peer joined",
   peerLeft: "peer: disconnected",

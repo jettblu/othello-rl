@@ -40,6 +40,13 @@ const inflight = new Map<number, Pending>();
 const moveCache = new Map<string, AiMoveTrace>();
 const valueCache = new Map<string, number>();
 
+function simulationBudget() {
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const lowCoreCount =
+    navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
+  return coarsePointer || lowCoreCount ? 8 : 64;
+}
+
 function getWorker() {
   if (worker) return worker;
   worker = new Worker(`/othello-ai/${AI_ASSET_VERSION}/worker.js`, {
@@ -102,7 +109,10 @@ function callWorker(
 
     inflight.set(id, { resolve: (reply) => finish(reply), reject: fail });
     signal?.addEventListener("abort", onAbort, { once: true });
-    aiWorker.postMessage({ id, type, board: cells, player }, [cells.buffer]);
+    aiWorker.postMessage(
+      { id, type, board: cells, player, simulations: simulationBudget() },
+      [cells.buffer]
+    );
   });
 }
 
