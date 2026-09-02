@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import * as m from "motion/react-m";
-import { pWinLine } from "@/constants/terminal";
+import { CMD, pWinLine } from "@/constants/terminal";
 
 const WIDTH = 200;
 const HEIGHT = 72;
@@ -32,6 +32,7 @@ function DualSpark({
   const pNow = values[values.length - 1] ?? 0.5;
   const pAt = cursor == null ? pNow : values[cursor];
   const xAt = last === 0 ? WIDTH : ((cursor ?? last) / last) * WIDTH;
+  const scrubbing = cursor != null && cursor !== last;
 
   function indexFromClientX(clientX: number) {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -45,18 +46,26 @@ function DualSpark({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="absolute inset-0 h-full w-full touch-none"
+        className="absolute inset-0 h-full w-full touch-none cursor-ew-resize"
         preserveAspectRatio="none"
-        role="img"
-        aria-hidden
+        role="slider"
+        aria-label="Win probability over the game"
+        aria-valuemin={0}
+        aria-valuemax={last}
+        aria-valuenow={cursor ?? last}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           onCursor(indexFromClientX(event.clientX));
         }}
-        onPointerMove={(event) => onCursor(indexFromClientX(event.clientX))}
-        onPointerUp={() => onCursor(null)}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+          onCursor(indexFromClientX(event.clientX));
+        }}
+        onPointerUp={(event) => {
+          const index = indexFromClientX(event.clientX);
+          onCursor(index == null || index === last ? null : index);
+        }}
         onPointerCancel={() => onCursor(null)}
-        onPointerLeave={() => onCursor(null)}
       >
         <path
           d={`M0,${HEIGHT / 2} H${WIDTH}`}
@@ -98,7 +107,7 @@ function DualSpark({
             />
           </>
         )}
-        {cursor != null && (
+        {scrubbing && (
           <path
             d={`M${xAt.toFixed(2)},0 V${HEIGHT}`}
             fill="none"
@@ -127,7 +136,7 @@ function DualSpark({
               transform: "translate(-50%, -50%)",
             }}
           />
-          {cursor != null && (
+          {scrubbing && (
             <>
               <span
                 className="absolute size-1.5 rounded-full bg-p1 ring-1 ring-ink pointer-events-none"
@@ -167,11 +176,19 @@ function Odds({ value }: { value: number | null }) {
   );
 }
 
-export default function WinProbability({ history }: { history: number[] }) {
-  const [cursor, setCursor] = useState<number | null>(null);
+export default function WinProbability({
+  history,
+  cursor,
+  onCursor,
+}: {
+  history: number[];
+  cursor: number | null;
+  onCursor: (index: number | null) => void;
+}) {
   const pA = cursor == null ? history.at(-1) : history[cursor];
   const pctA = pA == null ? null : Math.round(pA * 100);
   const pctB = pctA == null ? null : 100 - pctA;
+  const reviewing = cursor != null && cursor !== history.length - 1;
 
   return (
     <div
@@ -181,7 +198,9 @@ export default function WinProbability({ history }: { history: number[] }) {
       aria-label={
         pctA == null
           ? "Win probability loading"
-          : `Green win chance ${pctA} percent, amber ${pctB} percent`
+          : reviewing
+            ? `Reviewing move ${cursor + 1}, green ${pctA} percent, amber ${pctB} percent`
+            : `Green win chance ${pctA} percent, amber ${pctB} percent`
       }
     >
       <div className="flex items-center justify-between gap-2">
@@ -189,15 +208,24 @@ export default function WinProbability({ history }: { history: number[] }) {
           <span className="size-2 rounded-full bg-p1 shrink-0" />
           <Odds value={pctA} />
         </div>
-        <div className="tabular-nums text-[10px] shrink-0">
-          {pWinLine(pctA, pctB)}
+        <div className="tabular-nums text-[10px] shrink-0 flex items-center gap-2">
+          <span>{pWinLine(pctA, pctB)}</span>
+          {reviewing && (
+            <button
+              type="button"
+              className="text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+              onClick={() => onCursor(null)}
+            >
+              {CMD.now}
+            </button>
+          )}
         </div>
         <div className="flex items-center justify-end gap-1.5 min-w-0 text-p2">
           <Odds value={pctB} />
           <span className="size-2 rounded-full bg-p2 shrink-0" />
         </div>
       </div>
-      <DualSpark values={history} cursor={cursor} onCursor={setCursor} />
+      <DualSpark values={history} cursor={cursor} onCursor={onCursor} />
     </div>
   );
 }

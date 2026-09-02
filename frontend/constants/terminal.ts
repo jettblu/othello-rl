@@ -25,6 +25,7 @@ export const CMD = {
   remote: bin("remote"),
   level: bin("level"),
   skip: bin("skip"),
+  now: bin("now"),
   mcts: sh("mcts"),
 } as const;
 

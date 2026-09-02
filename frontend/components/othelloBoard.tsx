@@ -7,7 +7,11 @@ import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { IGlobalState } from "@/store/reducers";
 import OthelloPiece from "./othelloPiece";
-import { boardFromString, playAtPieceIndex } from "@/helpers/gameplay";
+import {
+  boardFromString,
+  playAtPieceIndex,
+  playerScore,
+} from "@/helpers/gameplay";
 import {
   preloadAiAgent,
   requestAiMove,
@@ -36,7 +40,7 @@ import {
   AI_SIMULATIONS,
   type AiDifficulty,
 } from "@/constants/ai";
-import { IPlayer, PlayerType } from "@/types";
+import { IBoard, IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
   setPlayerARemote,
@@ -163,7 +167,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [lastAiTrace, setLastAiTrace] = useState<AiMoveTrace | null>(null);
-  const [winHistory, setWinHistory] = useState<number[]>([]);
+  const [winHistory, setWinHistory] = useState<
+    { p: number; board: IBoard; lastPieceStr: string; turnStr: string }[]
+  >([]);
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("easy");
   const aiDifficultyRef = useRef<AiDifficulty>("easy");
   const dispatch = useDispatch();
@@ -181,6 +188,13 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
   const isRemote = Boolean(gameId);
   const gameOver = !playerA.hasMove && !playerB.hasMove;
+  const reviewing =
+    reviewIndex != null && reviewIndex < winHistory.length - 1;
+  const view = reviewing ? winHistory[reviewIndex] : null;
+  const shownBoard = view?.board ?? board;
+  const shownLastPiece = view?.lastPieceStr ?? gameAttrs.lastPieceStr;
+  const shownTurn = view?.turnStr ?? gameAttrs.turnStr;
+  const shownPlayer: 0 | 1 = shownTurn === "0" ? 0 : 1;
 
   useEffect(() => {
     const saved = localStorage.getItem(AI_DIFFICULTY_STORAGE_KEY);
@@ -210,6 +224,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     (pieceIndex: number, triggeredByRemote: boolean): boolean => {
       const currentTurn: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
 
+      if (
+        !triggeredByRemote &&
+        reviewIndex != null &&
+        reviewIndex < winHistory.length - 1
+      ) {
+        setReviewIndex(null);
+        return false;
+      }
       if (
         isRemote &&
         playerA.type !== PlayerType.Remote &&
@@ -283,6 +305,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       pathName,
       playerA.type,
       playerB.type,
+      reviewIndex,
+      winHistory.length,
     ]
   );
 
@@ -301,6 +325,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     sessionRef.current = createGameSession();
     pendingAiThinkMsRef.current = 0;
     setWinHistory([]);
+    setReviewIndex(null);
     setLastAiTrace(null);
     router.push("/");
     dispatch(resetGame());
@@ -440,8 +465,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
   useEffect(() => {
     const append = (pA: number) => {
+      const sample = {
+        p: pA,
+        board: [...board] as IBoard,
+        lastPieceStr: gameAttrs.lastPieceStr,
+        turnStr: gameAttrs.turnStr,
+      };
       setWinHistory((history) =>
-        gameAttrs.lastPieceStr === "-" ? [pA] : [...history, pA]
+        gameAttrs.lastPieceStr === "-" ? [sample] : [...history, sample]
       );
     };
 
@@ -596,11 +627,16 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       </div>
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-x-4 min-w-0 shrink-0">
         <PlayerStatus
-          player={playerA}
+          player={
+            view ? { ...playerA, score: playerScore(view.board, 0) } : playerA
+          }
           inverted
-          isToPlay={currPlayer === 0}
+          isToPlay={shownPlayer === 0}
           showSkip={
-            !playerA.hasMove && playerB.hasMove && gameAttrs.turnStr === "0"
+            !reviewing &&
+            !playerA.hasMove &&
+            playerB.hasMove &&
+            gameAttrs.turnStr === "0"
           }
           result={
             gameOver && playerA.score > playerB.score
@@ -617,11 +653,16 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           }}
         />
         <PlayerStatus
-          player={playerB}
+          player={
+            view ? { ...playerB, score: playerScore(view.board, 1) } : playerB
+          }
           inverted={false}
-          isToPlay={currPlayer === 1}
+          isToPlay={shownPlayer === 1}
           showSkip={
-            !playerB.hasMove && playerA.hasMove && gameAttrs.turnStr === "1"
+            !reviewing &&
+            !playerB.hasMove &&
+            playerA.hasMove &&
+            gameAttrs.turnStr === "1"
           }
           result={
             gameOver && playerB.score > playerA.score
@@ -638,18 +679,22 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           }}
         />
       </div>
-      <WinProbability history={winHistory} />
+      <WinProbability
+        history={winHistory.map((sample) => sample.p)}
+        cursor={reviewIndex}
+        onCursor={setReviewIndex}
+      />
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
         <div className="crt-screen aspect-square w-[min(100cqw,100cqh)] overflow-hidden">
           <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5 overflow-hidden">
             <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0">
-              {board.map((player, index) => (
+              {shownBoard.map((player, index) => (
                 <OthelloPiece
                   key={index}
                   pieceIndex={index}
                   playerIndex={player}
                   handlePieceSelection={handlePieceSelection}
-                  wasLastMove={index === Number(gameAttrs.lastPieceStr)}
+                  wasLastMove={index === Number(shownLastPiece)}
                 />
               ))}
             </div>
