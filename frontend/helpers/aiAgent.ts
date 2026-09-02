@@ -40,13 +40,6 @@ const inflight = new Map<number, Pending>();
 const moveCache = new Map<string, AiMoveTrace>();
 const valueCache = new Map<string, number>();
 
-function simulationBudget() {
-  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const lowCoreCount =
-    navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
-  return coarsePointer || lowCoreCount ? 8 : 64;
-}
-
 function getWorker() {
   if (worker) return worker;
   worker = new Worker(`/othello-ai/${AI_ASSET_VERSION}/worker.js`, {
@@ -85,7 +78,8 @@ function callWorker(
   type: "guided" | "evaluate",
   board: IBoard,
   player: 0 | 1,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  simulations?: number
 ): Promise<WorkerReply | null> {
   if (signal?.aborted) return Promise.resolve(null);
 
@@ -110,7 +104,7 @@ function callWorker(
     inflight.set(id, { resolve: (reply) => finish(reply), reject: fail });
     signal?.addEventListener("abort", onAbort, { once: true });
     aiWorker.postMessage(
-      { id, type, board: cells, player, simulations: simulationBudget() },
+      { id, type, board: cells, player, simulations },
       [cells.buffer]
     );
   });
@@ -124,24 +118,27 @@ export function preloadAiAgent() {
 export function requestAiMove(
   board: IBoard,
   player: 0 | 1,
+  simulations: number,
   signal?: AbortSignal
 ): Promise<AiMoveTrace | null> {
-  const key = cacheKey(board, player);
+  const key = `${cacheKey(board, player)}:${simulations}`;
   const cached = moveCache.get(key);
   if (cached !== undefined) return Promise.resolve(cached);
 
-  return callWorker("guided", board, player, signal).then((reply) => {
-    if (!reply) return null;
-    const trace = reply.trace;
-    if (!trace || trace.index < 0) return null;
-    const resolved = {
-      ...trace,
-      ms: reply.ms ?? trace.ms,
-      player: trace.player ?? player,
-    };
-    remember(moveCache, key, resolved);
-    return resolved;
-  });
+  return callWorker("guided", board, player, signal, simulations).then(
+    (reply) => {
+      if (!reply) return null;
+      const trace = reply.trace;
+      if (!trace || trace.index < 0) return null;
+      const resolved = {
+        ...trace,
+        ms: reply.ms ?? trace.ms,
+        player: trace.player ?? player,
+      };
+      remember(moveCache, key, resolved);
+      return resolved;
+    }
+  );
 }
 
 export function requestAiValue(

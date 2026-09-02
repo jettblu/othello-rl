@@ -32,6 +32,10 @@ import {
   winnerKind,
 } from "@/helpers/analytics";
 import { CMD, MSG, flag, othelloCmd, sideName } from "@/constants/terminal";
+import {
+  AI_SIMULATIONS,
+  type AiDifficulty,
+} from "@/constants/ai";
 import { IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -47,6 +51,8 @@ interface IRealtimeMove {
   move_index: number;
   player: number;
 }
+
+const AI_DIFFICULTY_STORAGE_KEY = "othello-ai-difficulty";
 
 function replaceQuery(pathname: string, updates: Record<string, string>) {
   const params = new URLSearchParams(window.location.search);
@@ -157,6 +163,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [lastAiTrace, setLastAiTrace] = useState<AiMoveTrace | null>(null);
   const [winHistory, setWinHistory] = useState<number[]>([]);
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("easy");
+  const aiDifficultyRef = useRef<AiDifficulty>("easy");
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -172,6 +180,29 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
   const isRemote = Boolean(gameId);
   const gameOver = !playerA.hasMove && !playerB.hasMove;
+
+  useEffect(() => {
+    const saved = localStorage.getItem(AI_DIFFICULTY_STORAGE_KEY);
+    if (saved === "easy" || saved === "hard") {
+      aiDifficultyRef.current = saved;
+      setAiDifficulty(saved);
+      return;
+    }
+    const coarsePointer =
+      window.matchMedia?.("(pointer: coarse)").matches ?? false;
+    const lowCoreCount =
+      navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
+    const preferred = coarsePointer || lowCoreCount ? "easy" : "hard";
+    aiDifficultyRef.current = preferred;
+    setAiDifficulty(preferred);
+  }, []);
+
+  const handleDifficultyChange = useCallback((difficulty: AiDifficulty) => {
+    aiDifficultyRef.current = difficulty;
+    setAiDifficulty(difficulty);
+    localStorage.setItem(AI_DIFFICULTY_STORAGE_KEY, difficulty);
+    setLastAiTrace(null);
+  }, []);
 
   const handlePieceSelection = useCallback(
     (pieceIndex: number, triggeredByRemote: boolean): boolean => {
@@ -467,7 +498,12 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       setLoadingAiMove(true);
       const start = Date.now();
       try {
-        const trace = await requestAiMove(board, player, controller.signal);
+        const trace = await requestAiMove(
+          board,
+          player,
+          AI_SIMULATIONS[aiDifficultyRef.current],
+          controller.signal
+        );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;
         const elapsed = Date.now() - start;
         pendingAiThinkMsRef.current = elapsed;
@@ -654,6 +690,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         }
         thinking={loadingAiMove}
         trace={lastAiTrace}
+        difficulty={aiDifficulty}
+        onDifficultyChange={handleDifficultyChange}
       />
     </div>
   );
