@@ -107,16 +107,6 @@ function DualSpark({
             />
           </>
         )}
-        {scrubbing && (
-          <path
-            d={`M${xAt.toFixed(2)},0 V${HEIGHT}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-            className="text-crt-line"
-          />
-        )}
       </svg>
       {values.length > 0 && (
         <>
@@ -139,7 +129,11 @@ function DualSpark({
           {scrubbing && (
             <>
               <span
-                className="absolute size-1.5 rounded-full bg-p1 ring-1 ring-ink pointer-events-none"
+                className="absolute inset-y-0 w-px bg-crt-line pointer-events-none -translate-x-1/2 transition-[left] duration-[50ms] ease-out"
+                style={{ left: `${(xAt / WIDTH) * 100}%` }}
+              />
+              <span
+                className="absolute size-1.5 rounded-full bg-p1 ring-1 ring-ink pointer-events-none transition-[left,top] duration-[50ms] ease-out"
                 style={{
                   left: `${(xAt / WIDTH) * 100}%`,
                   top: `${(1 - pAt) * 100}%`,
@@ -147,7 +141,7 @@ function DualSpark({
                 }}
               />
               <span
-                className="absolute size-1.5 rounded-full bg-p2 ring-1 ring-ink pointer-events-none"
+                className="absolute size-1.5 rounded-full bg-p2 ring-1 ring-ink pointer-events-none transition-[left,top] duration-[50ms] ease-out"
                 style={{
                   left: `${(xAt / WIDTH) * 100}%`,
                   top: `${pAt * 100}%`,
@@ -162,14 +156,20 @@ function DualSpark({
   );
 }
 
-function Odds({ value }: { value: number | null }) {
+function Odds({
+  value,
+  duration = 0.16,
+}: {
+  value: number | null;
+  duration?: number;
+}) {
   return (
     <m.span
       key={value ?? "pending"}
       className="tabular-nums"
       initial={{ opacity: 0.65 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.16 }}
+      transition={{ duration }}
     >
       {value == null ? ".." : `${value}%`}
     </m.span>
@@ -206,7 +206,7 @@ export default function WinProbability({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0 text-p1">
           <span className="size-2 rounded-full bg-p1 shrink-0" />
-          <Odds value={pctA} />
+          <Odds value={pctA} duration={reviewing ? 0.05 : 0.16} />
         </div>
         <div className="tabular-nums text-[10px] shrink-0 flex items-center gap-2">
           <span>{pWinLine(pctA, pctB)}</span>
@@ -221,7 +221,7 @@ export default function WinProbability({
           )}
         </div>
         <div className="flex items-center justify-end gap-1.5 min-w-0 text-p2">
-          <Odds value={pctB} />
+          <Odds value={pctB} duration={reviewing ? 0.05 : 0.16} />
           <span className="size-2 rounded-full bg-p2 shrink-0" />
         </div>
       </div>

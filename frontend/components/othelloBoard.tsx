@@ -695,6 +695,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                   playerIndex={player}
                   handlePieceSelection={handlePieceSelection}
                   wasLastMove={index === Number(shownLastPiece)}
+                  scrub={reviewIndex != null}
                 />
               ))}
             </div>

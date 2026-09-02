@@ -8,6 +8,7 @@ function OthelloPiece({
   playerIndex,
   wasLastMove,
   handlePieceSelection,
+  scrub,
 }: {
   pieceIndex: number;
   playerIndex: number;
@@ -16,6 +17,7 @@ function OthelloPiece({
     pieceIndex: number,
     triggeredByRemote: boolean
   ) => boolean;
+  scrub?: boolean;
 }) {
   const [flashInvalid, setFlashInvalid] = useState(false);
   const empty = playerIndex === emptyTile;
@@ -39,7 +41,7 @@ function OthelloPiece({
     <m.button
       type="button"
       aria-label={`Square ${pieceIndex + 1}`}
-      className={`min-w-0 w-full h-full p-0 border-0 rounded-full appearance-none touch-manipulation ${
+      className={`min-w-0 w-full h-full p-0 border-0 rounded-full appearance-none touch-manipulation transition-[box-shadow] duration-[50ms] ${
         wasLastMove && !empty ? "piece-last" : ""
       }`}
       initial={false}
@@ -50,15 +52,14 @@ function OthelloPiece({
       onClick={onClick}
     >
       <m.span
-        key={playerIndex}
+        key={scrub ? "scrub" : playerIndex}
         className="block w-full h-full rounded-full"
         style={{
-          backgroundColor: fill,
           boxShadow: empty ? undefined : "inset 0 0 0 1px rgba(0,0,0,0.4)",
         }}
-        initial={empty ? { scale: 1 } : { scale: 0.55 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.28 }}
+        initial={scrub ? false : empty ? { scale: 1 } : { scale: 0.55 }}
+        animate={{ backgroundColor: fill, scale: 1 }}
+        transition={{ duration: scrub ? 0.05 : 0.28 }}
       />
     </m.button>
   );
