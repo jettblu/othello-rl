@@ -183,18 +183,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
   useEffect(() => {
     const saved = localStorage.getItem(AI_DIFFICULTY_STORAGE_KEY);
-    if (saved === "easy" || saved === "hard") {
-      aiDifficultyRef.current = saved;
-      setAiDifficulty(saved);
-      return;
-    }
     const coarsePointer =
       window.matchMedia?.("(pointer: coarse)").matches ?? false;
     const lowCoreCount =
       navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
-    const preferred = coarsePointer || lowCoreCount ? "easy" : "hard";
+    const preferred: AiDifficulty =
+      saved === "easy" || saved === "hard"
+        ? saved
+        : coarsePointer || lowCoreCount
+          ? "easy"
+          : "hard";
     aiDifficultyRef.current = preferred;
-    setAiDifficulty(preferred);
+    const timeout = window.setTimeout(() => setAiDifficulty(preferred), 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   const handleDifficultyChange = useCallback((difficulty: AiDifficulty) => {
