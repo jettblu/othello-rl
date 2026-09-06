@@ -19,6 +19,7 @@ import {
   sideToMoveValueToBlackWin,
   type AiMoveTrace,
 } from "@/helpers/aiAgent";
+import { cancelUrlSync, replaceQuery } from "@/helpers/urlSync";
 import WinProbability from "./winProbability";
 import AiConsole from "./aiConsole";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
@@ -58,19 +59,17 @@ interface IRealtimeMove {
 
 const AI_DIFFICULTY_STORAGE_KEY = "othello-ai-difficulty";
 const DESKTOP_AI_MEDIA_QUERY = "(min-width: 768px)";
+/** Minimum wall-clock time between consecutive AI turns, moves and endgame passes. */
+const AI_TURN_MIN_INTERVAL_MS = 80;
 
-function replaceQuery(pathname: string, updates: Record<string, string>) {
-  const params = new URLSearchParams(window.location.search);
-  for (const [key, value] of Object.entries(updates)) {
-    if (value) params.set(key, value);
-    else params.delete(key);
-  }
-  const query = params.toString();
-  window.history.replaceState(
-    null,
-    "",
-    query ? `${pathname}?${query}` : pathname
-  );
+// One paced tick per AI turn so an all-AI game doesn't resolve in one
+// cascading render burst. Abort may leave the timer running; resolving twice
+// is a no-op.
+function paceAiTurn(signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, AI_TURN_MIN_INTERVAL_MS);
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
 }
 
 function PlayerStatus({
@@ -327,6 +326,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     setWinHistory([]);
     setReviewIndex(null);
     setLastAiTrace(null);
+    // A queued URL write must not stamp the finished game onto the reset page.
+    cancelUrlSync();
     router.push("/");
     dispatch(resetGame());
   }, [dispatch, playerA.type, playerB.type, router]);
@@ -515,17 +516,22 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       (playerB.type === PlayerType.AI && gameAttrs.turnStr === "1");
     if (!isAiTurn || gameOver) return;
 
-    if (gameAttrs.turnStr === "0" && !playerA.hasMove) {
-      if (playerB.hasMove) handleTurnToggle();
-      return;
-    }
-    if (gameAttrs.turnStr === "1" && !playerB.hasMove) {
-      if (playerA.hasMove) handleTurnToggle();
-      return;
+    const toMove = gameAttrs.turnStr === "0" ? 0 : 1;
+    const moverHasMove = toMove === 0 ? playerA.hasMove : playerB.hasMove;
+    const opponentHasMove = toMove === 0 ? playerB.hasMove : playerA.hasMove;
+
+    if (!moverHasMove) {
+      // Endgame pass — pace it like a move to keep all-AI cadence.
+      if (!opponentHasMove) return;
+      const controller = new AbortController();
+      (async () => {
+        await paceAiTurn(controller.signal);
+        if (!controller.signal.aborted) handleTurnToggle();
+      })();
+      return () => controller.abort();
     }
 
     const controller = new AbortController();
-    const player: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
 
     (async () => {
       setLoadingAiMove(true);
@@ -536,12 +542,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         const difficulty = desktop ? aiDifficultyRef.current : "easy";
         const trace = await requestAiMove(
           board,
-          player,
+          toMove,
           AI_SIMULATIONS[difficulty],
           controller.signal
         );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;
         const elapsed = Date.now() - start;
+        await paceAiTurn(controller.signal);
+        if (controller.signal.aborted) return;
         pendingAiThinkMsRef.current = elapsed;
         setLastAiTrace(trace);
         handlePieceSelectionRef.current(trace.index, false);
@@ -602,6 +610,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
+    cancelUrlSync();
     const params = new URLSearchParams({
       board: gameAttrs.boardStr,
       turn: gameAttrs.turnStr,
