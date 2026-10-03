@@ -6,7 +6,7 @@ use burn::record::{HalfPrecisionSettings, NamedMpkBytesRecorder, Recorder};
 use rl_gym::env::Environment;
 use rl_gym::games::othello::{Othello, OthelloAction, Player};
 use rl_gym::tools::alphazero::{PolicyValueAgent, PolicyValueConfig};
-use rl_gym::tools::mcts::{DEFAULT_LEAF_BATCH, MctsSolver};
+use rl_gym::tools::mcts::{DEFAULT_LEAF_BATCH, MctsSolver, SearchReport};
 use wasm_bindgen::prelude::*;
 
 type NetBackend = NdArray<f32>;
@@ -69,19 +69,15 @@ impl OthelloAgent {
         }
         let mut solver = self.solver;
         solver.num_simulations = sims;
-        let dist = solver.search_distribution_batched(
-            &env,
-            self.inner.as_ref(),
-            DEFAULT_LEAF_BATCH,
-        );
-        let index = dist
-            .first()
-            .map(|(action, _)| {
+        let report = solver.search_report_batched(&env, self.inner.as_ref(), DEFAULT_LEAF_BATCH);
+        let index = report
+            .leading_action()
+            .map(|action| {
                 let OthelloAction::Place(row, col) = *action;
                 (row * 8 + col) as i32
             })
             .unwrap_or(-1);
-        (index, format_trace(index, sims, &dist))
+        (index, format_trace(index, &report))
     }
 }
 
@@ -133,21 +129,29 @@ fn empty_trace(index: i32, sims: usize) -> String {
     )
 }
 
-fn format_trace(index: i32, sims: usize, dist: &[(OthelloAction, f32)]) -> String {
-    let moves: Vec<String> = dist
+fn format_trace(index: i32, report: &SearchReport<OthelloAction>) -> String {
+    let moves: Vec<String> = report
+        .action_stats
         .iter()
         .take(6)
-        .map(|(action, share)| {
-            let OthelloAction::Place(row, col) = *action;
+        .map(|stat| {
+            let OthelloAction::Place(row, col) = stat.action;
             let sq = algebraic(row, col);
             let idx = row * 8 + col;
-            let n = (*share * sims as f32).round().max(1.0) as u32;
-            let p = json_f32(*share);
-            format!("{{\"sq\":\"{sq}\",\"idx\":{idx},\"n\":{n},\"q\":0.0000,\"p\":{p}}}")
+            let q = json_f32(stat.mean_value());
+            let p = json_f32(stat.visit_share(report.root_visits));
+            format!(
+                "{{\"sq\":\"{sq}\",\"idx\":{idx},\"n\":{},\"q\":{q},\"p\":{p}}}",
+                stat.visits
+            )
         })
         .collect();
     format!(
-        "{{\"index\":{index},\"sims\":{sims},\"nodes\":{sims},\"root\":{sims},\"c\":{EXPLORATION},\"moves\":[{}]}}",
+        "{{\"index\":{index},\"sims\":{},\"nodes\":{},\"root\":{},\"c\":{:.2},\"moves\":[{}]}}",
+        report.completed,
+        report.nodes,
+        report.root_visits,
+        report.exploration_constant,
         moves.join(",")
     )
 }

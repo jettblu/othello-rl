@@ -41,6 +41,10 @@ export default function AiConsole({
     trace && trace.index >= 0
       ? (trace.moves.find((m) => m.idx === trace.index)?.sq ?? String(trace.index))
       : null;
+  const pickQ =
+    trace && trace.index >= 0
+      ? trace.moves.find((m) => m.idx === trace.index)?.q
+      : undefined;
 
   return (
     <div
@@ -63,7 +67,7 @@ export default function AiConsole({
                   .join("  ")}
           </div>
           <div className={trace.player === 1 ? "text-p2" : "text-p1"}>
-            {playCmd(pick)}
+            {playCmd(pick, pickQ)}
           </div>
         </>
       )}

@@ -694,8 +694,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         onCursor={setReviewIndex}
       />
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
-        <div className="crt-screen aspect-square w-[min(100cqw,100cqh)] overflow-hidden">
-          <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5 overflow-hidden">
+        <div className="crt-screen aspect-square w-[min(100cqw,100cqh)]">
+          <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5">
             <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0">
               {shownBoard.map((player, index) => (
                 <OthelloPiece

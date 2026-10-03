@@ -2489,7 +2489,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 [[package]]
 name = "rl-gym"
 version = "0.1.0"
-source = "git+https://github.com/jettblu/rl-gym.git?rev=68eb34595808b8d7ba7ec7ef74338c7100f62c3d#68eb34595808b8d7ba7ec7ef74338c7100f62c3d"
+source = "git+https://github.com/jettblu/rl-gym.git?rev=bc13735741b54772d9503535aaa4204f8dcd2bec#bc13735741b54772d9503535aaa4204f8dcd2bec"
 dependencies = [
  "burn",
  "crossbeam-channel",

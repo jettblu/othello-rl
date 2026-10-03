@@ -42,8 +42,11 @@ export function mctsCmd(input: {
   );
 }
 
-export function playCmd(square: string | null) {
-  return square ? `play ${square}` : "mcts: no move";
+export function playCmd(square: string | null, q?: number | null) {
+  if (!square) return "mcts: no move";
+  if (q == null || !Number.isFinite(q)) return `play ${square}`;
+  const sign = q >= 0 ? "+" : "";
+  return `play ${square} q=${sign}${q.toFixed(2)}`;
 }
 
 export function pWinLine(pctA: number | null, pctB: number | null) {

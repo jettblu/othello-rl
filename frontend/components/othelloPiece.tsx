@@ -42,7 +42,7 @@ function OthelloPiece({
       type="button"
       aria-label={`Square ${pieceIndex + 1}`}
       className={`min-w-0 w-full h-full p-0 border-0 rounded-full appearance-none touch-manipulation transition-[box-shadow] duration-[50ms] ${
-        wasLastMove && !empty ? "piece-last" : ""
+        empty ? "overflow-visible" : ""
       }`}
       initial={false}
       animate={flashInvalid ? { x: [0, -5, 5, -4, 4, 0] } : { x: 0 }}
@@ -53,7 +53,9 @@ function OthelloPiece({
     >
       <m.span
         key={scrub ? "scrub" : playerIndex}
-        className="block w-full h-full rounded-full"
+        className={`block w-full h-full rounded-full ${
+          wasLastMove && !empty ? "piece-last" : ""
+        }`}
         style={{
           boxShadow: empty ? undefined : "inset 0 0 0 1px rgba(0,0,0,0.4)",
         }}

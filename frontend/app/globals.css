@@ -117,9 +117,9 @@ body {
 
 .piece-last {
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--halo) 80%, transparent),
-    0 0 8px color-mix(in srgb, var(--halo) 75%, transparent),
-    0 0 16px color-mix(in srgb, var(--halo) 40%, transparent);
+    inset 0 0 0 2px color-mix(in srgb, var(--halo) 85%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--halo) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--halo) 35%, transparent);
 }
 
 .desktop-ai-difficulty {
