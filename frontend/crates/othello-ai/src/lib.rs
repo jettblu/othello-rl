@@ -133,7 +133,6 @@ fn format_trace(index: i32, report: &SearchReport<OthelloAction>) -> String {
     let moves: Vec<String> = report
         .action_stats
         .iter()
-        .take(6)
         .map(|stat| {
             let OthelloAction::Place(row, col) = stat.action;
             let sq = algebraic(row, col);

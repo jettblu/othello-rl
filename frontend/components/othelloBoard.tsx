@@ -22,6 +22,7 @@ import {
 import { cancelUrlSync, replaceQuery } from "@/helpers/urlSync";
 import WinProbability from "./winProbability";
 import AiConsole from "./aiConsole";
+import AiLevelToggle from "./aiLevelToggle";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
 import {
   createGameSession,
@@ -37,10 +38,14 @@ import {
   winnerKind,
 } from "@/helpers/analytics";
 import { CMD, MSG, flag, othelloCmd, sideName } from "@/constants/terminal";
+import { type AiDifficulty } from "@/constants/ai";
 import {
-  AI_SIMULATIONS,
-  type AiDifficulty,
-} from "@/constants/ai";
+  loadAiDifficultyByPlayer,
+  persistAiDifficulty,
+  simulationsFor,
+  type AiDifficultyByPlayer,
+} from "@/helpers/aiDifficulty";
+import { mctsInsightByIndex } from "@/helpers/aiMctsMap";
 import { IBoard, IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -57,18 +62,26 @@ interface IRealtimeMove {
   player: number;
 }
 
-const AI_DIFFICULTY_STORAGE_KEY = "othello-ai-difficulty";
-const DESKTOP_AI_MEDIA_QUERY = "(min-width: 768px)";
+
 /** Minimum wall-clock time between consecutive AI turns, moves and endgame passes. */
 const AI_TURN_MIN_INTERVAL_MS = 80;
+/** Dual-AI watch mode: show root Q on the board before the move is played. */
+const DUAL_AI_MCTS_PREVIEW_MS = 1400;
 
 // One paced tick per AI turn so an all-AI game doesn't resolve in one
 // cascading render burst. Abort may leave the timer running; resolving twice
 // is a no-op.
-function paceAiTurn(signal: AbortSignal) {
+function paceAiTurn(signal: AbortSignal, holdMs = AI_TURN_MIN_INTERVAL_MS) {
   return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, AI_TURN_MIN_INTERVAL_MS);
-    signal.addEventListener("abort", () => resolve(), { once: true });
+    const timer = window.setTimeout(resolve, holdMs);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
   });
 }
 
@@ -80,6 +93,8 @@ function PlayerStatus({
   result,
   onSkip,
   onToggleAi,
+  aiLevel,
+  onAiLevelChange,
 }: {
   player: IPlayer;
   inverted: boolean;
@@ -88,8 +103,11 @@ function PlayerStatus({
   result: "winner" | "tie" | null;
   onSkip: () => void;
   onToggleAi: () => void;
+  aiLevel?: AiDifficulty;
+  onAiLevelChange?: (level: AiDifficulty) => void;
 }) {
   const side = inverted ? sideName(0) : sideName(1);
+  const sideKey = inverted ? ("grn" as const) : ("amb" as const);
   const color = inverted ? "text-p1" : "text-p2";
   const pip = inverted ? "bg-p1" : "bg-p2";
   return (
@@ -154,6 +172,13 @@ function PlayerStatus({
           {flag("ai", player.type === PlayerType.AI)}
         </button>
       )}
+      {player.type === PlayerType.AI && aiLevel && onAiLevelChange && (
+        <AiLevelToggle
+          side={sideKey}
+          value={aiLevel}
+          onChange={onAiLevelChange}
+        />
+      )}
     </div>
   );
 }
@@ -170,8 +195,16 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     { p: number; board: IBoard; lastPieceStr: string; turnStr: string }[]
   >([]);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
-  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("easy");
-  const aiDifficultyRef = useRef<AiDifficulty>("easy");
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficultyByPlayer>({
+    0: "easy",
+    1: "easy",
+  });
+  const aiDifficultyRef = useRef<AiDifficultyByPlayer>({ 0: "easy", 1: "easy" });
+  const [mctsSnapshot, setMctsSnapshot] = useState<{
+    boardStr: string;
+    turnStr: string;
+    trace: AiMoveTrace;
+  } | null>(null);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -196,27 +229,21 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const shownPlayer: 0 | 1 = shownTurn === "0" ? 0 : 1;
 
   useEffect(() => {
-    const saved = localStorage.getItem(AI_DIFFICULTY_STORAGE_KEY);
-    const desktop =
-      window.matchMedia?.(DESKTOP_AI_MEDIA_QUERY).matches ?? false;
-    const lowCoreCount =
-      navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4;
-    const preferred: AiDifficulty =
-      desktop && (saved === "easy" || saved === "hard")
-        ? saved
-        : desktop && !lowCoreCount
-          ? "hard"
-          : "easy";
-    aiDifficultyRef.current = preferred;
-    const timeout = window.setTimeout(() => setAiDifficulty(preferred), 0);
+    const loaded = loadAiDifficultyByPlayer();
+    aiDifficultyRef.current = loaded;
+    const timeout = window.setTimeout(() => setAiDifficulty(loaded), 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
-  const handleDifficultyChange = useCallback((difficulty: AiDifficulty) => {
-    aiDifficultyRef.current = difficulty;
-    setAiDifficulty(difficulty);
-    localStorage.setItem(AI_DIFFICULTY_STORAGE_KEY, difficulty);
+  const handleDifficultyChange = useCallback((player: 0 | 1, difficulty: AiDifficulty) => {
+    aiDifficultyRef.current = {
+      ...aiDifficultyRef.current,
+      [player]: difficulty,
+    };
+    setAiDifficulty({ ...aiDifficultyRef.current });
+    persistAiDifficulty(player, difficulty);
     setLastAiTrace(null);
+    setMctsSnapshot(null);
   }, []);
 
   const handlePieceSelection = useCallback(
@@ -326,6 +353,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     setWinHistory([]);
     setReviewIndex(null);
     setLastAiTrace(null);
+    setMctsSnapshot(null);
     // A queued URL write must not stamp the finished game onto the reset page.
     cancelUrlSync();
     router.push("/");
@@ -535,23 +563,32 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
     (async () => {
       setLoadingAiMove(true);
+      setMctsSnapshot(null);
       const start = Date.now();
       try {
-        const desktop =
-          window.matchMedia?.(DESKTOP_AI_MEDIA_QUERY).matches ?? false;
-        const difficulty = desktop ? aiDifficultyRef.current : "easy";
+        const sims = simulationsFor(toMove, aiDifficultyRef.current);
         const trace = await requestAiMove(
           board,
           toMove,
-          AI_SIMULATIONS[difficulty],
+          sims,
           controller.signal
         );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;
         const elapsed = Date.now() - start;
-        await paceAiTurn(controller.signal);
+        setMctsSnapshot({
+          boardStr: gameAttrs.boardStr,
+          turnStr: gameAttrs.turnStr,
+          trace,
+        });
+        setLastAiTrace(trace);
+        const bothAi =
+          playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
+        await paceAiTurn(
+          controller.signal,
+          bothAi ? DUAL_AI_MCTS_PREVIEW_MS : AI_TURN_MIN_INTERVAL_MS
+        );
         if (controller.signal.aborted) return;
         pendingAiThinkMsRef.current = elapsed;
-        setLastAiTrace(trace);
         handlePieceSelectionRef.current(trace.index, false);
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -570,6 +607,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     };
   }, [
     board,
+    gameAttrs.boardStr,
     gameAttrs.turnStr,
     gameOver,
     handleTurnToggle,
@@ -607,6 +645,20 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerB.score,
     playerB.type,
   ]);
+
+  const anyAi =
+    playerA.type === PlayerType.AI || playerB.type === PlayerType.AI;
+  const showMctsLayer =
+    anyAi &&
+    !reviewing &&
+    mctsSnapshot != null &&
+    mctsSnapshot.boardStr === gameAttrs.boardStr &&
+    mctsSnapshot.turnStr === gameAttrs.turnStr;
+  const mctsByIndex = mctsInsightByIndex(
+    showMctsLayer ? mctsSnapshot.trace : null
+  );
+  const mctsMover = showMctsLayer ? mctsSnapshot.trace.player : null;
+  const mctsChosenIdx = showMctsLayer ? mctsSnapshot.trace.index : -1;
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
@@ -660,6 +712,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
             trackAiToggled(playerA.type !== PlayerType.AI);
             dispatch(toggle_playerA_Ai());
           }}
+          aiLevel={
+            playerA.type === PlayerType.AI ? aiDifficulty[0] : undefined
+          }
+          onAiLevelChange={(level) => handleDifficultyChange(0, level)}
         />
         <PlayerStatus
           player={
@@ -686,6 +742,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
             trackAiToggled(playerB.type !== PlayerType.AI);
             dispatch(toggle_playerB_Ai());
           }}
+          aiLevel={
+            playerB.type === PlayerType.AI ? aiDifficulty[1] : undefined
+          }
+          onAiLevelChange={(level) => handleDifficultyChange(1, level)}
         />
       </div>
       <WinProbability
@@ -696,7 +756,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
         <div className="crt-screen aspect-square w-[min(100cqw,100cqh)]">
           <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5">
-            <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0">
+            <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0 overflow-visible">
               {shownBoard.map((player, index) => (
                 <OthelloPiece
                   key={index}
@@ -705,6 +765,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                   handlePieceSelection={handlePieceSelection}
                   wasLastMove={index === Number(shownLastPiece)}
                   scrub={reviewIndex != null}
+                  showMctsLayer={showMctsLayer}
+                  mctsInsight={mctsByIndex.get(index) ?? null}
+                  mctsChosen={index === mctsChosenIdx}
+                  moverTint={mctsMover}
                 />
               ))}
             </div>
@@ -742,20 +806,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           >
             {CMD.remote}
           </m.button>
-        )}
-        {(playerA.type === PlayerType.AI || playerB.type === PlayerType.AI) && (
-          <button
-            type="button"
-            className="desktop-ai-difficulty text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
-            onClick={() =>
-              handleDifficultyChange(
-                aiDifficulty === "easy" ? "hard" : "easy"
-              )
-            }
-            aria-label={`AI difficulty ${aiDifficulty}; activate the other level`}
-          >
-            {CMD.level} --{aiDifficulty}
-          </button>
         )}
       </div>
       <AiConsole
