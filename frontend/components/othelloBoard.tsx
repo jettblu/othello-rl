@@ -13,10 +13,12 @@ import {
   playerScore,
 } from "@/helpers/gameplay";
 import {
+  advanceAiSearchTree,
   preloadAiAgent,
   requestAiMove,
   requestMctsTrace,
   requestAiValue,
+  resetAiSearchTree,
   sideToMoveValueToBlackWin,
   type AiMoveTrace,
 } from "@/helpers/aiAgent";
@@ -45,7 +47,11 @@ import {
   simulationsFor,
   type AiDifficultyByPlayer,
 } from "@/helpers/aiDifficulty";
-import { mctsInsightByIndex } from "@/helpers/aiMctsMap";
+import { recommendationsByIndex } from "@/helpers/aiMctsMap";
+import {
+  MCTS_OVERLAY_FADE_MS,
+  useMctsOverlayFade,
+} from "@/helpers/useMctsOverlayFade";
 import {
   loadShowDetails,
   persistShowDetails,
@@ -84,23 +90,7 @@ function isHumanPlayer(player: IPlayer) {
   return player.type !== PlayerType.AI && player.type !== PlayerType.Remote;
 }
 
-function ponderSimulations(
-  human: 0 | 1,
-  levels: AiDifficultyByPlayer,
-  playerA: IPlayer,
-  playerB: IPlayer
-) {
-  const opponent: 0 | 1 = human === 0 ? 1 : 0;
-  const opp = opponent === 0 ? playerA : playerB;
-  if (opp.type === PlayerType.AI) {
-    return simulationsFor(opponent, levels);
-  }
-  return simulationsFor(human, levels);
-}
-
-// One paced tick per AI turn so an all-AI game doesn't resolve in one
-// cascading render burst. Abort may leave the timer running; resolving twice
-// is a no-op.
+// One paced tick per AI turn
 function paceAiTurn(signal: AbortSignal, holdMs = AI_TURN_MIN_INTERVAL_MS) {
   return new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, holdMs);
@@ -192,23 +182,27 @@ function PlayerStatus({
           </m.span>
         )}
       </div>
-      {player.type !== PlayerType.Remote && (
-        <button
-          type="button"
-          className="shrink-0 tabular-nums text-crt-dim hover:text-crt-phosphor min-h-11 sm:min-h-0"
-          onClick={onToggleAi}
-          aria-pressed={player.type === PlayerType.AI}
-        >
-          {flag("ai", player.type === PlayerType.AI)}
-        </button>
-      )}
-      {player.type === PlayerType.AI && aiLevel && onAiLevelChange && (
-        <AiLevelToggle
-          side={sideKey}
-          value={aiLevel}
-          onChange={onAiLevelChange}
-        />
-      )}
+      <div className="shrink-0 flex items-center justify-end gap-1.5 min-w-[6.75rem] sm:min-w-[7.25rem]">
+        {player.type !== PlayerType.Remote && (
+          <button
+            type="button"
+            className="tabular-nums text-crt-dim hover:text-crt-phosphor min-h-11 sm:min-h-0"
+            onClick={onToggleAi}
+            aria-pressed={player.type === PlayerType.AI}
+          >
+            {flag("ai", player.type === PlayerType.AI)}
+          </button>
+        )}
+        {player.type === PlayerType.AI && aiLevel && onAiLevelChange ? (
+          <AiLevelToggle
+            side={sideKey}
+            value={aiLevel}
+            onChange={onAiLevelChange}
+          />
+        ) : (
+          <span className="inline-block w-[4.75rem] h-7 shrink-0" aria-hidden />
+        )}
+      </div>
     </div>
   );
 }
@@ -274,7 +268,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       const next = !on;
       showDetailsRef.current = next;
       persistShowDetails(next);
-      if (!next) setMctsSnapshot(null);
+      if (!next) {
+        setMctsSnapshot(null);
+        void resetAiSearchTree();
+      }
       if (next) preloadAiAgent();
       return next;
     });
@@ -288,6 +285,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     setAiDifficulty({ ...aiDifficultyRef.current });
     persistAiDifficulty(player, difficulty);
     setMctsSnapshot(null);
+    void resetAiSearchTree();
   }, []);
 
   const handlePieceSelection = useCallback(
@@ -340,6 +338,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       if (!triggeredByRemote) {
         setMctsSnapshot(null);
       }
+      void advanceAiSearchTree(pieceIndex);
 
       replaceQuery(pathName, {
         board: res.boardStr,
@@ -401,6 +400,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     setWinHistory([]);
     setReviewIndex(null);
     setMctsSnapshot(null);
+    void resetAiSearchTree();
     cancelUrlSync();
     router.push("/");
     dispatch(resetGame());
@@ -612,7 +612,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
     (async () => {
       setLoadingAiMove(true);
-      setMctsSnapshot(null);
       const start = Date.now();
       try {
         const sims = simulationsFor(toMove, aiDifficultyRef.current);
@@ -634,10 +633,18 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         }
         const bothAi =
           playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
-        await paceAiTurn(
-          controller.signal,
-          bothAi ? DUAL_AI_MCTS_PREVIEW_MS : AI_TURN_MIN_INTERVAL_MS
+        const previewMs = bothAi
+          ? DUAL_AI_MCTS_PREVIEW_MS
+          : AI_TURN_MIN_INTERVAL_MS;
+        const fadeOutMs = Math.min(
+          MCTS_OVERLAY_FADE_MS,
+          Math.max(48, Math.floor(previewMs * 0.35))
         );
+        const holdMs = Math.max(0, previewMs - fadeOutMs);
+        await paceAiTurn(controller.signal, holdMs);
+        if (controller.signal.aborted) return;
+        if (showDetailsRef.current) setMctsSnapshot(null);
+        await paceAiTurn(controller.signal, fadeOutMs);
         if (controller.signal.aborted) return;
         pendingAiThinkMsRef.current = elapsed;
         handlePieceSelectionRef.current(trace.index, false);
@@ -684,18 +691,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
     const controller = new AbortController();
     (async () => {
-      const sims = ponderSimulations(
-        currPlayer,
-        aiDifficultyRef.current,
-        playerA,
-        playerB
-      );
-      const trace = await requestMctsTrace(
-        board,
-        currPlayer,
-        sims,
-        controller.signal
-      );
+      const trace = await requestMctsTrace(board, currPlayer, controller.signal);
       if (controller.signal.aborted || !trace || trace.moves.length === 0) {
         return;
       }
@@ -753,20 +749,28 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerB.type,
   ]);
 
-  const showMctsLayer =
+  const mctsBoardKey = `${gameAttrs.boardStr}:${gameAttrs.turnStr}`;
+  const mctsSnapshotActive =
     showDetails &&
     anyAi &&
     !reviewing &&
     mctsSnapshot != null &&
     mctsSnapshot.boardStr === gameAttrs.boardStr &&
     mctsSnapshot.turnStr === gameAttrs.turnStr;
-  const mctsByIndex = mctsInsightByIndex(
-    showMctsLayer ? mctsSnapshot.trace : null
+
+  const { renderedSnapshot: mctsRendered, overlayOpacity: mctsOverlayOpacity } =
+    useMctsOverlayFade(mctsSnapshotActive, mctsSnapshot, mctsBoardKey);
+
+  const showMctsLayer =
+    mctsRendered != null && mctsOverlayOpacity > 0.02 && showDetails && !reviewing;
+  const mctsByIndex = recommendationsByIndex(
+    showMctsLayer && mctsRendered ? mctsRendered.trace : null
   );
-  const mctsMover = showMctsLayer ? mctsSnapshot.trace.player : null;
+  const mctsMover =
+    showMctsLayer && mctsRendered ? mctsRendered.trace.player : null;
   const mctsChosenIdx =
-    showMctsLayer && mctsSnapshot.highlightPick
-      ? mctsSnapshot.trace.index
+    showMctsLayer && mctsSnapshotActive && mctsRendered.highlightPick
+      ? mctsRendered.trace.index
       : -1;
 
   function handleStartRemoteGame() {
@@ -857,13 +861,20 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           onAiLevelChange={(level) => handleDifficultyChange(1, level)}
         />
       </div>
-      {showDetails && (
+      <div
+        className={`shrink-0 min-h-[4.75rem] sm:min-h-[5.25rem] transition-opacity duration-150 ${
+          showDetails
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none select-none"
+        }`}
+        aria-hidden={!showDetails}
+      >
         <WinProbability
           history={winHistory.map((sample) => sample.p)}
           cursor={reviewIndex}
           onCursor={setReviewIndex}
         />
-      )}
+      </div>
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
         <div className="crt-screen aspect-square w-[min(100cqw,100cqh)]">
           <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5">
@@ -877,9 +888,12 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                   wasLastMove={index === Number(shownLastPiece)}
                   scrub={reviewIndex != null}
                   showMctsLayer={showMctsLayer}
-                  mctsInsight={mctsByIndex.get(index) ?? null}
+                  mctsOverlayOpacity={mctsOverlayOpacity}
+                  mctsStaggerIndex={index}
+                  mctsRecommendation={mctsByIndex.get(index) ?? null}
                   mctsChosen={index === mctsChosenIdx}
                   moverTint={mctsMover}
+                  mctsFadeMs={MCTS_OVERLAY_FADE_MS}
                 />
               ))}
             </div>
@@ -895,36 +909,31 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         >
           {CMD.reset}
         </button>
-        {waitingForPlayer && (
-          <m.p
-            className="text-left"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-          >
-            {CMD.remote}
-            <span className="tui-cursor" aria-hidden />
-          </m.p>
-        )}
-        {!waitingForPlayer && !isRemote && (
-          <m.button
-            type="button"
-            className="text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={handleStartRemoteGame}
-          >
-            {CMD.remote}
-          </m.button>
-        )}
+        <div className="relative min-h-11 min-w-[6.5rem] flex items-center">
+          {waitingForPlayer ? (
+            <p className="text-left">
+              {CMD.remote}
+              <span className="tui-cursor" aria-hidden />
+            </p>
+          ) : !isRemote ? (
+            <button
+              type="button"
+              className="text-left w-fit py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+              onClick={handleStartRemoteGame}
+            >
+              {CMD.remote}
+            </button>
+          ) : null}
+        </div>
         <button
           type="button"
-          className="text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+          className="text-left min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer tabular-nums"
           onClick={handleDetailsToggle}
           aria-pressed={showDetails}
         >
-          {CMD.details} {flag("details", showDetails)}
+          <span className="inline-block min-w-[13.5ch] text-left">
+            {CMD.details} {flag("details", showDetails)}
+          </span>
         </button>
       </div>
     </div>
