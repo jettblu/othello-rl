@@ -1,14 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{
-    get,
-    middleware,
-    post,
-    web,
-    App,
-    HttpRequest,
-    HttpResponse,
-    HttpServer,
-    Responder,
+    get, middleware, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use actix_ws::Message;
 use futures::StreamExt;
@@ -23,6 +15,11 @@ use tokio::sync::{
     mpsc::{self, UnboundedReceiver, UnboundedSender},
     RwLock,
 };
+
+mod game_ingest;
+
+use aws_sdk_s3::Client;
+use game_ingest::IngestState;
 
 type AppState = (mpsc::UnboundedSender<WsState>, Users, Rooms);
 
@@ -264,6 +261,8 @@ async fn main() -> std::io::Result<()> {
     let rooms = Rooms::default();
     let app_state = web::Data::new((tx_ws_state, users, rooms));
 
+    let ingest_state = build_ingest_state().await;
+
     println!("Listening on {bind}");
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -277,7 +276,10 @@ async fn main() -> std::io::Result<()> {
                 .wrap(cors)
                 .wrap(middleware::NormalizePath::trim())
                 .app_data(app_state.clone())
+                .app_data(web::Data::from(ingest_state.clone()))
+                .app_data(web::PayloadConfig::new(game_ingest::MAX_BODY_BYTES))
                 .service(web::resource("/ws").route(web::get().to(websocket)))
+                .service(game_ingest::post_game)
                 .service(hello)
                 .service(echo),
         )
@@ -285,4 +287,19 @@ async fn main() -> std::io::Result<()> {
     .bind(&bind)?
     .run()
     .await
+}
+
+async fn build_ingest_state() -> Arc<IngestState> {
+    let bucket = std::env::var("BUCKET_NAME").ok();
+    let s3 = if bucket.is_some() {
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        Some(Client::new(&config))
+    } else {
+        None
+    };
+    Arc::new(IngestState {
+        s3,
+        bucket,
+        rate: tokio::sync::Mutex::new(game_ingest::RateLimiter::default()),
+    })
 }

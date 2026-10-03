@@ -55,3 +55,22 @@ Deploy from this directory with Fly (`fly.toml` + `Dockerfile`):
 ```bash
 fly deploy
 ```
+
+### Gameplay logs (Tigris)
+
+```bash
+fly storage create
+fly secrets set \
+  BUCKET_NAME=your-bucket \
+  AWS_ACCESS_KEY_ID=... \
+  AWS_SECRET_ACCESS_KEY=... \
+  AWS_ENDPOINT_URL_S3=...
+```
+
+Completed games are validated and rate-limited at `POST /api/games`, then written to
+`games/{id}.json`. Export objects and run:
+
+```bash
+node scripts/game_log_to_csv.mjs ./exported > data/othello_dataset.csv
+cargo run -p othello_agent --bin data_generate
+```

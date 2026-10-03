@@ -7,3 +7,8 @@ export function getApiHost() {
     ? process.env.NEXT_PUBLIC_API_HOST_PROD
     : process.env.NEXT_PUBLIC_API_HOST_DEV;
 }
+
+export function getApiUrl(path: string) {
+  const protocol = isProdEnv() ? "https" : "http";
+  return `${protocol}://${getApiHost()}${path}`;
+}

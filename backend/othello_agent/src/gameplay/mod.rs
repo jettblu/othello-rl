@@ -7,3 +7,5 @@ pub mod constants;
 pub mod position;
 
 pub mod game;
+
+pub mod validate;

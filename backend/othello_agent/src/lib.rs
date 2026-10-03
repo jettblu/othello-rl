@@ -13,7 +13,10 @@ mod tests {
     }
 }
 
-pub mod gameplay;
+#[cfg(feature = "training")]
 pub mod agent;
-pub mod simulate;
+pub mod gameplay;
+#[cfg(feature = "training")]
 pub mod model;
+#[cfg(feature = "training")]
+pub mod simulate;

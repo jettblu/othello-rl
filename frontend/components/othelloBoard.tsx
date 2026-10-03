@@ -39,6 +39,14 @@ import {
   trackRemoteGameJoined,
   winnerKind,
 } from "@/helpers/analytics";
+import {
+  appendGameLogPly,
+  buildGameLogPayload,
+  createGameLogSession,
+  gameModeCode,
+  snapshotAiDifficulties,
+  submitGameLog,
+} from "@/helpers/gameLog";
 import { CMD, MSG, flag, othelloCmd, sideName } from "@/constants/terminal";
 import { type AiDifficulty } from "@/constants/ai";
 import {
@@ -236,6 +244,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const seatRef = useRef<"a" | "b" | null>(null);
   const didAnnounceJoin = useRef(false);
   const sessionRef = useRef(createGameSession());
+  const gameLogRef = useRef(createGameLogSession());
+  const lastPlyAtRef = useRef(0);
   const pendingAiThinkMsRef = useRef(0);
 
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
@@ -252,6 +262,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const shownPlayer: 0 | 1 = shownTurn === "0" ? 0 : 1;
 
   useEffect(() => {
+    lastPlyAtRef.current = Date.now();
     const loaded = loadAiDifficultyByPlayer();
     aiDifficultyRef.current = loaded;
     const details = loadShowDetails();
@@ -356,6 +367,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
       const moverType = currentTurn === 0 ? playerA.type : playerB.type;
       const session = sessionRef.current;
+      const thinkMs =
+        moverType === PlayerType.AI
+          ? pendingAiThinkMsRef.current
+          : Date.now() - lastPlyAtRef.current;
+      const log = gameLogRef.current;
+      snapshotAiDifficulties(
+        log,
+        playerA.type,
+        playerB.type,
+        aiDifficultyRef.current
+      );
+      appendGameLogPly(log, pieceIndex, thinkMs);
+      lastPlyAtRef.current = Date.now();
       recordMove(
         session,
         moverType,
@@ -396,6 +420,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       );
     }
     sessionRef.current = createGameSession();
+    gameLogRef.current = createGameLogSession();
+    lastPlyAtRef.current = Date.now();
     pendingAiThinkMsRef.current = 0;
     setWinHistory([]);
     setReviewIndex(null);
@@ -741,12 +767,33 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       aiMoves: session.aiMoves,
       aiThinkMs: session.aiThinkMs,
     });
+    const winnerCode =
+      playerA.score > playerB.score
+        ? 0
+        : playerB.score > playerA.score
+          ? 1
+          : 2;
+    const startedFromInitialBoard =
+      playerA.score + playerB.score === 4 + session.moves;
+    const isRemoteRecorder = !isRemote || seatRef.current === "a";
+    if (startedFromInitialBoard && isRemoteRecorder) {
+      submitGameLog(
+        buildGameLogPayload({
+          log: gameLogRef.current,
+          mode: gameModeCode(playerA.type, playerB.type),
+          blackScore: playerA.score,
+          whiteScore: playerB.score,
+          winner: winnerCode,
+        })
+      );
+    }
   }, [
     gameOver,
     playerA.score,
     playerA.type,
     playerB.score,
     playerB.type,
+    isRemote,
   ]);
 
   const mctsBoardKey = `${gameAttrs.boardStr}:${gameAttrs.turnStr}`;
@@ -936,6 +983,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           </span>
         </button>
       </div>
+      <p className="shrink-0 pt-2 text-[10px] sm:text-xs text-crt-dim/70 leading-snug">
+        Completed games may be stored anonymously to improve the AI and measure
+        usage. Game records do not include account or room identifiers.
+      </p>
     </div>
   );
 }

@@ -17,6 +17,13 @@ export function boardFromString(s: string) {
     .slice(0, 64) as IBoard;
 }
 
+/** Algebraic square for Rust `game_moves` encoding (e.g. f5). */
+export function squareFromPieceIndex(pieceIndex: number): string {
+  const col = pieceIndex % 8;
+  const row = Math.floor(pieceIndex / 8);
+  return String.fromCharCode(97 + col) + String(1 + row);
+}
+
 export function positionFromPieceIndex(
   pieceIndex: number
 ): IPosition | undefined {
