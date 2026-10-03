@@ -42,3 +42,6 @@ next-env.d.ts
 # rust / wasm-pack intermediates (the compiled public/othello-ai bundle is tracked)
 /crates/othello-ai/target
 /crates/othello-ai/pkg
+
+AGENTS.md
+CLAUDE.md
