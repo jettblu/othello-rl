@@ -146,6 +146,24 @@ export function preloadAiAgent() {
   getWorker();
 }
 
+export function requestMctsTrace(
+  board: IBoard,
+  player: 0 | 1,
+  simulations: number,
+  signal?: AbortSignal
+): Promise<AiMoveTrace | null> {
+  return callWorker("guided", board, player, signal, simulations).then(
+    (reply) => {
+      if (!reply?.trace) return null;
+      return {
+        ...reply.trace,
+        ms: reply.ms ?? reply.trace.ms,
+        player: reply.trace.player ?? player,
+      };
+    }
+  );
+}
+
 export function requestAiMove(
   board: IBoard,
   player: 0 | 1,
@@ -156,18 +174,11 @@ export function requestAiMove(
   const cached = moveCache.get(key);
   if (cached !== undefined) return Promise.resolve(cached);
 
-  return callWorker("guided", board, player, signal, simulations).then(
-    (reply) => {
-      if (!reply) return null;
-      const trace = reply.trace;
+  return requestMctsTrace(board, player, simulations, signal).then(
+    (trace) => {
       if (!trace || trace.index < 0) return null;
-      const resolved = {
-        ...trace,
-        ms: reply.ms ?? trace.ms,
-        player: trace.player ?? player,
-      };
-      remember(moveCache, key, resolved);
-      return resolved;
+      remember(moveCache, key, trace);
+      return trace;
     }
   );
 }

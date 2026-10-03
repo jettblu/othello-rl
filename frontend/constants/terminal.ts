@@ -23,6 +23,7 @@ export function othelloCmd(remote: boolean) {
 export const CMD = {
   reset: bin("reset"),
   remote: bin("remote"),
+  details: bin("details"),
   level: bin("level"),
   skip: bin("skip"),
   now: bin("now"),

@@ -15,13 +15,13 @@ import {
 import {
   preloadAiAgent,
   requestAiMove,
+  requestMctsTrace,
   requestAiValue,
   sideToMoveValueToBlackWin,
   type AiMoveTrace,
 } from "@/helpers/aiAgent";
 import { cancelUrlSync, replaceQuery } from "@/helpers/urlSync";
 import WinProbability from "./winProbability";
-import AiConsole from "./aiConsole";
 import AiLevelToggle from "./aiLevelToggle";
 import { getApiHost, isProdEnv } from "@/helpers/requests";
 import {
@@ -46,6 +46,10 @@ import {
   type AiDifficultyByPlayer,
 } from "@/helpers/aiDifficulty";
 import { mctsInsightByIndex } from "@/helpers/aiMctsMap";
+import {
+  loadShowDetails,
+  persistShowDetails,
+} from "@/helpers/gamePreferences";
 import { IBoard, IPlayer, PlayerType } from "@/types";
 import {
   resetGame,
@@ -67,6 +71,32 @@ interface IRealtimeMove {
 const AI_TURN_MIN_INTERVAL_MS = 80;
 /** Dual-AI watch mode: show root Q on the board before the move is played. */
 const DUAL_AI_MCTS_PREVIEW_MS = 1400;
+
+type MctsSnapshot = {
+  boardStr: string;
+  turnStr: string;
+  trace: AiMoveTrace;
+  /** Ring the move the search is about to play (AI commit), not ponder hints. */
+  highlightPick: boolean;
+};
+
+function isHumanPlayer(player: IPlayer) {
+  return player.type !== PlayerType.AI && player.type !== PlayerType.Remote;
+}
+
+function ponderSimulations(
+  human: 0 | 1,
+  levels: AiDifficultyByPlayer,
+  playerA: IPlayer,
+  playerB: IPlayer
+) {
+  const opponent: 0 | 1 = human === 0 ? 1 : 0;
+  const opp = opponent === 0 ? playerA : playerB;
+  if (opp.type === PlayerType.AI) {
+    return simulationsFor(opponent, levels);
+  }
+  return simulationsFor(human, levels);
+}
 
 // One paced tick per AI turn so an all-AI game doesn't resolve in one
 // cascading render burst. Abort may leave the timer running; resolving twice
@@ -190,7 +220,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const playerB = useSelector((state: IGlobalState) => state.playerB);
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const [loadingAiMove, setLoadingAiMove] = useState(false);
-  const [lastAiTrace, setLastAiTrace] = useState<AiMoveTrace | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const showDetailsRef = useRef(false);
   const [winHistory, setWinHistory] = useState<
     { p: number; board: IBoard; lastPieceStr: string; turnStr: string }[]
   >([]);
@@ -200,11 +231,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     1: "easy",
   });
   const aiDifficultyRef = useRef<AiDifficultyByPlayer>({ 0: "easy", 1: "easy" });
-  const [mctsSnapshot, setMctsSnapshot] = useState<{
-    boardStr: string;
-    turnStr: string;
-    trace: AiMoveTrace;
-  } | null>(null);
+  const [mctsSnapshot, setMctsSnapshot] = useState<MctsSnapshot | null>(null);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -218,6 +245,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const pendingAiThinkMsRef = useRef(0);
 
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
+  const anyAi =
+    playerA.type === PlayerType.AI || playerB.type === PlayerType.AI;
   const isRemote = Boolean(gameId);
   const gameOver = !playerA.hasMove && !playerB.hasMove;
   const reviewing =
@@ -231,8 +260,24 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   useEffect(() => {
     const loaded = loadAiDifficultyByPlayer();
     aiDifficultyRef.current = loaded;
-    const timeout = window.setTimeout(() => setAiDifficulty(loaded), 0);
+    const details = loadShowDetails();
+    showDetailsRef.current = details;
+    const timeout = window.setTimeout(() => {
+      setAiDifficulty(loaded);
+      setShowDetails(details);
+    }, 0);
     return () => window.clearTimeout(timeout);
+  }, []);
+
+  const handleDetailsToggle = useCallback(() => {
+    setShowDetails((on) => {
+      const next = !on;
+      showDetailsRef.current = next;
+      persistShowDetails(next);
+      if (!next) setMctsSnapshot(null);
+      if (next) preloadAiAgent();
+      return next;
+    });
   }, []);
 
   const handleDifficultyChange = useCallback((player: 0 | 1, difficulty: AiDifficulty) => {
@@ -242,7 +287,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     };
     setAiDifficulty({ ...aiDifficultyRef.current });
     persistAiDifficulty(player, difficulty);
-    setLastAiTrace(null);
     setMctsSnapshot(null);
   }, []);
 
@@ -292,6 +336,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
 
       const res = playAtPieceIndex(board, pieceIndex, currentTurn);
       if (!res) return false;
+
+      if (!triggeredByRemote) {
+        setMctsSnapshot(null);
+      }
 
       replaceQuery(pathName, {
         board: res.boardStr,
@@ -352,9 +400,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     pendingAiThinkMsRef.current = 0;
     setWinHistory([]);
     setReviewIndex(null);
-    setLastAiTrace(null);
     setMctsSnapshot(null);
-    // A queued URL write must not stamp the finished game onto the reset page.
     cancelUrlSync();
     router.push("/");
     dispatch(resetGame());
@@ -493,6 +539,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   }, [dispatch, gameId]);
 
   useEffect(() => {
+    if (!showDetails) return;
+
     const append = (pA: number) => {
       const sample = {
         p: pA,
@@ -536,6 +584,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     gameOver,
     playerA.score,
     playerB.score,
+    showDetails,
   ]);
 
   useEffect(() => {
@@ -575,12 +624,14 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;
         const elapsed = Date.now() - start;
-        setMctsSnapshot({
-          boardStr: gameAttrs.boardStr,
-          turnStr: gameAttrs.turnStr,
-          trace,
-        });
-        setLastAiTrace(trace);
+        if (showDetailsRef.current) {
+          setMctsSnapshot({
+            boardStr: gameAttrs.boardStr,
+            turnStr: gameAttrs.turnStr,
+            trace,
+            highlightPick: true,
+          });
+        }
         const bothAi =
           playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
         await paceAiTurn(
@@ -615,6 +666,62 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerA.type,
     playerB.hasMove,
     playerB.type,
+    showDetails,
+  ]);
+
+  // Ponder while a human chooses: run MCTS for the current position and keep Q on the board.
+  useEffect(() => {
+    if (!showDetails || !anyAi || gameOver || reviewing || loadingAiMove) return;
+
+    const bothAi =
+      playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
+    if (bothAi) return;
+
+    const humanSide =
+      currPlayer === 0 ? playerA : playerB;
+    if (!isHumanPlayer(humanSide)) return;
+    if (!humanSide.hasMove) return;
+
+    const controller = new AbortController();
+    (async () => {
+      const sims = ponderSimulations(
+        currPlayer,
+        aiDifficultyRef.current,
+        playerA,
+        playerB
+      );
+      const trace = await requestMctsTrace(
+        board,
+        currPlayer,
+        sims,
+        controller.signal
+      );
+      if (controller.signal.aborted || !trace || trace.moves.length === 0) {
+        return;
+      }
+      setMctsSnapshot({
+        boardStr: gameAttrs.boardStr,
+        turnStr: gameAttrs.turnStr,
+        trace,
+        highlightPick: false,
+      });
+    })();
+
+    return () => controller.abort();
+  }, [
+    anyAi,
+    board,
+    currPlayer,
+    gameAttrs.boardStr,
+    gameAttrs.turnStr,
+    gameOver,
+    loadingAiMove,
+    playerA.hasMove,
+    playerA.type,
+    playerB.hasMove,
+    playerB.type,
+    reviewing,
+    showDetails,
   ]);
 
   useEffect(() => {
@@ -646,9 +753,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerB.type,
   ]);
 
-  const anyAi =
-    playerA.type === PlayerType.AI || playerB.type === PlayerType.AI;
   const showMctsLayer =
+    showDetails &&
     anyAi &&
     !reviewing &&
     mctsSnapshot != null &&
@@ -658,7 +764,10 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     showMctsLayer ? mctsSnapshot.trace : null
   );
   const mctsMover = showMctsLayer ? mctsSnapshot.trace.player : null;
-  const mctsChosenIdx = showMctsLayer ? mctsSnapshot.trace.index : -1;
+  const mctsChosenIdx =
+    showMctsLayer && mctsSnapshot.highlightPick
+      ? mctsSnapshot.trace.index
+      : -1;
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
@@ -748,11 +857,13 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           onAiLevelChange={(level) => handleDifficultyChange(1, level)}
         />
       </div>
-      <WinProbability
-        history={winHistory.map((sample) => sample.p)}
-        cursor={reviewIndex}
-        onCursor={setReviewIndex}
-      />
+      {showDetails && (
+        <WinProbability
+          history={winHistory.map((sample) => sample.p)}
+          cursor={reviewIndex}
+          onCursor={setReviewIndex}
+        />
+      )}
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
         <div className="crt-screen aspect-square w-[min(100cqw,100cqh)]">
           <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5">
@@ -807,14 +918,15 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
             {CMD.remote}
           </m.button>
         )}
+        <button
+          type="button"
+          className="text-left w-fit min-h-11 py-1 text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+          onClick={handleDetailsToggle}
+          aria-pressed={showDetails}
+        >
+          {CMD.details} {flag("details", showDetails)}
+        </button>
       </div>
-      <AiConsole
-        active={
-          playerA.type === PlayerType.AI || playerB.type === PlayerType.AI
-        }
-        thinking={loadingAiMove}
-        trace={lastAiTrace}
-      />
     </div>
   );
 }
