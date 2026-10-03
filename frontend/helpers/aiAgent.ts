@@ -1,4 +1,8 @@
-import { AI_ASSET_VERSION, POSITION_CACHE_LIMIT } from "@/constants/ai";
+import {
+  AI_ASSET_VERSION,
+  PONDER_SIMULATIONS,
+  POSITION_CACHE_LIMIT,
+} from "@/constants/ai";
 import { IBoard } from "@/types";
 
 export type AiCandidate = {
@@ -27,18 +31,26 @@ type WorkerReply = {
   ms?: number;
   trace?: AiMoveTrace;
   error?: string;
+  kept?: boolean;
 };
+
+type WorkerMessage =
+  | {
+      id: number;
+      type: "guided";
+      board: Uint8Array;
+      player: 0 | 1;
+      simulations?: number;
+      ponder?: boolean;
+    }
+  | { id: number; type: "evaluate"; board: Uint8Array; player: 0 | 1 }
+  | { id: number; type: "resetTree" }
+  | { id: number; type: "advance"; advanceMove: number };
 
 type Pending = {
   resolve: (reply: WorkerReply) => void;
   reject: (err: Error) => void;
-  message: {
-    id: number;
-    type: "guided" | "evaluate";
-    board: Uint8Array;
-    player: 0 | 1;
-    simulations?: number;
-  };
+  message: WorkerMessage;
 };
 
 let worker: Worker | null = null;
@@ -61,8 +73,12 @@ function runNextRequest() {
   const pending = inflight.get(id);
   if (!pending) return;
   activeId = id;
-  const { board, ...message } = pending.message;
-  getWorker().postMessage({ ...message, board }, [board.buffer]);
+  const { message } = pending;
+  if (message.type === "guided" || message.type === "evaluate") {
+    getWorker().postMessage(message, [message.board.buffer]);
+  } else {
+    getWorker().postMessage(message);
+  }
 }
 
 function getWorker() {
@@ -104,17 +120,13 @@ function remember<T>(store: Map<string, T>, key: string, value: T) {
   store.set(key, value);
 }
 
-function callWorker(
-  type: "guided" | "evaluate",
-  board: IBoard,
-  player: 0 | 1,
-  signal?: AbortSignal,
-  simulations?: number
+function enqueue(
+  message: Omit<WorkerMessage, "id">,
+  signal?: AbortSignal
 ): Promise<WorkerReply | null> {
   if (signal?.aborted) return Promise.resolve(null);
 
   const id = nextId++;
-  const cells = Uint8Array.from(board);
 
   return new Promise((resolve, reject) => {
     const finish = (reply: WorkerReply | null) => {
@@ -130,10 +142,11 @@ function callWorker(
       finish(null);
     };
 
+    const payload = { ...message, id } as WorkerMessage;
     inflight.set(id, {
       resolve: (reply) => finish(reply),
       reject: fail,
-      message: { id, type, board: cells, player, simulations },
+      message: payload,
     });
     signal?.addEventListener("abort", onAbort, { once: true });
     requestQueue.push(id);
@@ -141,27 +154,70 @@ function callWorker(
   });
 }
 
+function traceFromReply(
+  reply: WorkerReply,
+  player: 0 | 1
+): AiMoveTrace | null {
+  if (!reply.trace) return null;
+  return {
+    ...reply.trace,
+    ms: reply.ms ?? reply.trace.ms,
+    player: reply.trace.player ?? player,
+  };
+}
+
+function callWorker(
+  type: "guided" | "evaluate",
+  board: IBoard,
+  player: 0 | 1,
+  signal?: AbortSignal,
+  simulations?: number,
+  ponder?: boolean
+): Promise<WorkerReply | null> {
+  const cells = Uint8Array.from(board);
+  if (type === "guided") {
+    return enqueue(
+      { type: "guided", board: cells, player, simulations, ponder },
+      signal
+    );
+  }
+  return enqueue({ type: "evaluate", board: cells, player }, signal);
+}
+
 export function preloadAiAgent() {
   if (typeof window === "undefined") return;
   getWorker();
 }
 
+export function resetAiSearchTree() {
+  if (typeof window === "undefined") return Promise.resolve();
+  preloadAiAgent();
+  moveCache.clear();
+  return enqueue({ type: "resetTree" }).then(() => undefined);
+}
+
+export function advanceAiSearchTree(moveIndex: number) {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  preloadAiAgent();
+  moveCache.clear();
+  return enqueue({ type: "advance", advanceMove: moveIndex }).then((reply) =>
+    Boolean(reply?.kept)
+  );
+}
+
 export function requestMctsTrace(
   board: IBoard,
   player: 0 | 1,
-  simulations: number,
   signal?: AbortSignal
 ): Promise<AiMoveTrace | null> {
-  return callWorker("guided", board, player, signal, simulations).then(
-    (reply) => {
-      if (!reply?.trace) return null;
-      return {
-        ...reply.trace,
-        ms: reply.ms ?? reply.trace.ms,
-        player: reply.trace.player ?? player,
-      };
-    }
-  );
+  return callWorker(
+    "guided",
+    board,
+    player,
+    signal,
+    PONDER_SIMULATIONS,
+    true
+  ).then((reply) => (reply ? traceFromReply(reply, player) : null));
 }
 
 export function requestAiMove(
@@ -170,12 +226,14 @@ export function requestAiMove(
   simulations: number,
   signal?: AbortSignal
 ): Promise<AiMoveTrace | null> {
-  const key = `${cacheKey(board, player)}:${simulations}`;
+  const key = `${cacheKey(board, player)}:${simulations}:play`;
   const cached = moveCache.get(key);
   if (cached !== undefined) return Promise.resolve(cached);
 
-  return requestMctsTrace(board, player, simulations, signal).then(
-    (trace) => {
+  return callWorker("guided", board, player, signal, simulations, false).then(
+    (reply) => {
+      if (!reply) return null;
+      const trace = traceFromReply(reply, player);
       if (!trace || trace.index < 0) return null;
       remember(moveCache, key, trace);
       return trace;
