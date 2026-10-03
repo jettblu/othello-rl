@@ -1,0 +1,8 @@
+{
+  "channels": 3,
+  "height": 8,
+  "width": 8,
+  "filters": 96,
+  "actions": 64,
+  "blocks": 4
+}

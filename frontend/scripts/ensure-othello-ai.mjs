@@ -15,7 +15,7 @@ if (!version) {
 
 const dir = join(frontendRoot, "public/othello-ai", version);
 const required = [
-  ["othello_ai_bg.wasm", 100_000],
+  ["othello_ai_bg.wasm", 1_400_000],
   ["othello_ai.js", 1_000],
   ["worker.js", 200],
 ];
