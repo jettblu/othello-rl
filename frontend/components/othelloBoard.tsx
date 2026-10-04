@@ -744,6 +744,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerB.type,
     reviewing,
     showDetails,
+    aiDifficulty,
   ]);
 
   useEffect(() => {
