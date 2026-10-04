@@ -34,18 +34,19 @@ type WorkerReply = {
   kept?: boolean;
 };
 
-type WorkerMessage =
+type WorkerMessageInput =
   | {
-      id: number;
       type: "guided";
       board: Uint8Array;
       player: 0 | 1;
       simulations?: number;
       ponder?: boolean;
     }
-  | { id: number; type: "evaluate"; board: Uint8Array; player: 0 | 1 }
-  | { id: number; type: "resetTree" }
-  | { id: number; type: "advance"; advanceMove: number };
+  | { type: "evaluate"; board: Uint8Array; player: 0 | 1 }
+  | { type: "resetTree" }
+  | { type: "advance"; advanceMove: number };
+
+type WorkerMessage = WorkerMessageInput & { id: number };
 
 type Pending = {
   resolve: (reply: WorkerReply) => void;
@@ -121,7 +122,7 @@ function remember<T>(store: Map<string, T>, key: string, value: T) {
 }
 
 function enqueue(
-  message: Omit<WorkerMessage, "id">,
+  message: WorkerMessageInput,
   signal?: AbortSignal
 ): Promise<WorkerReply | null> {
   if (signal?.aborted) return Promise.resolve(null);
