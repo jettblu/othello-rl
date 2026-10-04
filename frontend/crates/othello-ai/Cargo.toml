@@ -15,7 +15,7 @@ name = "trace_coverage"
 path = "examples/trace_coverage.rs"
 
 [dependencies]
-rl-gym = { git = "https://github.com/jettblu/rl-gym.git", rev = "b42d771b596f700d0e113ec3d2e700adb63c917b", default-features = false }
+rl-gym = { git = "https://github.com/jettblu/rl-gym.git", rev = "0879175220ecf30ac9caf1517b27be5fb640cadf", default-features = false }
 burn = { version = "0.18", default-features = false, features = ["std", "ndarray"] }
 wasm-bindgen = "0.2"
 getrandom = { version = "0.2", features = ["js"] }

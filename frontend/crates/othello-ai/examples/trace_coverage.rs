@@ -6,7 +6,7 @@ use burn::module::Module;
 use burn::record::{HalfPrecisionSettings, NamedMpkBytesRecorder, Recorder};
 use rl_gym::env::Environment;
 use rl_gym::games::othello::Othello;
-use rl_gym::tools::alphazero::{PolicyValueAgent, PolicyValueConfig};
+use rl_gym::tools::alphazero::{search_solver_from, PolicyValueAgent, PolicyValueConfig, SearchPlayConfig};
 use rl_gym::tools::mcts::{DEFAULT_LEAF_BATCH, MctsSolver, SearchTree};
 
 type NetBackend = NdArray<f32>;
@@ -31,10 +31,18 @@ fn main() {
 
     for (label, sims, prune) in [("easy-play", 8, true), ("ponder", 32, false)] {
         tree.reset();
-        let mut solver = MctsSolver::new(sims, 1.4);
-        if prune {
-            solver = solver.with_play_pruning();
-        }
+        let solver = if prune {
+            search_solver_from(SearchPlayConfig {
+                sims,
+                exploration: 1.4,
+                use_network_value: true,
+                fpu_reduction: None,
+                subtree_reuse: false,
+                leaf_batch: DEFAULT_LEAF_BATCH,
+            })
+        } else {
+            MctsSolver::new(sims, 1.4)
+        };
         let report = solver.search_report_with_tree(&env, &agent, &mut tree, DEFAULT_LEAF_BATCH);
         let visited = report.action_stats.iter().filter(|s| s.visits > 0).count();
         println!(

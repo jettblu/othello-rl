@@ -6,7 +6,9 @@ use burn::module::Module;
 use burn::record::{HalfPrecisionSettings, NamedMpkBytesRecorder, Recorder};
 use rl_gym::env::Environment;
 use rl_gym::games::othello::{Othello, OthelloAction, Player};
-use rl_gym::tools::alphazero::{PolicyValueAgent, PolicyValueConfig, Prediction};
+use rl_gym::tools::alphazero::{
+    search_solver_from, PolicyValueAgent, PolicyValueConfig, Prediction, SearchPlayConfig,
+};
 use rl_gym::tools::mcts::{
     ActionStat, DEFAULT_LEAF_BATCH, MctsSolver, SearchReport, SearchTree,
 };
@@ -18,6 +20,23 @@ type NetBackend = NdArray<f32>;
 const WEIGHTS: &[u8] = include_bytes!("../models/res96b4-hc.mpk");
 const EXPLORATION: f32 = 1.4;
 const PONDER_SIMS: usize = 32;
+
+/// Equal-latency search sweep (Oct 2026): value backup + top-8 priors at matched ms/move.
+fn play_search_solver(base_sims: usize) -> MctsSolver {
+    search_solver_from(SearchPlayConfig {
+        sims: base_sims,
+        exploration: EXPLORATION,
+        use_network_value: true,
+        fpu_reduction: None,
+        subtree_reuse: false,
+        leaf_batch: DEFAULT_LEAF_BATCH,
+    })
+}
+
+/// Ponder overlay: full legal root, still value backup (no capped rollouts).
+fn ponder_search_solver(base_sims: usize) -> MctsSolver {
+    MctsSolver::new(base_sims, EXPLORATION)
+}
 
 #[wasm_bindgen]
 pub struct OthelloAgent {
@@ -34,8 +53,8 @@ impl OthelloAgent {
     pub fn new() -> Result<OthelloAgent, JsValue> {
         let device = Default::default();
         let agent = load_champion(&device).map_err(|err| JsValue::from_str(&err))?;
-        let play_solver = MctsSolver::new(PONDER_SIMS, EXPLORATION).with_play_pruning();
-        let ponder_solver = MctsSolver::new(PONDER_SIMS, EXPLORATION);
+        let play_solver = play_search_solver(PONDER_SIMS);
+        let ponder_solver = ponder_search_solver(PONDER_SIMS);
         Ok(Self {
             inner: Arc::new(agent),
             play_solver,
@@ -301,4 +320,24 @@ fn format_trace(
         report.exploration_constant,
         moves.join(",")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn play_search_uses_value_backup_and_play_pruning() {
+        let solver = play_search_solver(16);
+        assert!(solver.use_network_value);
+        assert_eq!(solver.prior_topk, 8);
+        assert_eq!(solver.rollout_cap, 16);
+    }
+
+    #[test]
+    fn ponder_search_uses_value_backup_without_root_pruning() {
+        let solver = ponder_search_solver(32);
+        assert!(solver.use_network_value);
+        assert_eq!(solver.prior_topk, 0);
+    }
 }
