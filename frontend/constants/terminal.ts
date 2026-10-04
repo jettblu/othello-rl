@@ -27,6 +27,8 @@ export const CMD = {
   level: bin("level"),
   skip: bin("skip"),
   now: bin("now"),
+  yes: bin("yes"),
+  no: bin("no"),
   mcts: sh("mcts"),
 } as const;
 
@@ -60,4 +62,5 @@ export const MSG = {
   remoteClosed: "remote: disconnected",
   mctsFailed: "mcts: failed",
   noRootMoves: "mcts: no root moves",
+  resetFromHere: "this will reset the game state",
 } as const;

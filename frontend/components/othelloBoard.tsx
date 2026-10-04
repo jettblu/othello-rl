@@ -11,6 +11,7 @@ import {
   boardFromString,
   playAtPieceIndex,
   playerScore,
+  squareFromPieceIndex,
 } from "@/helpers/gameplay";
 import {
   advanceAiSearchTree,
@@ -20,7 +21,6 @@ import {
   requestAiValue,
   resetAiSearchTree,
   sideToMoveValueToBlackWin,
-  type AiMoveTrace,
 } from "@/helpers/aiAgent";
 import { cancelUrlSync, replaceQuery } from "@/helpers/urlSync";
 import WinProbability from "./winProbability";
@@ -38,14 +38,17 @@ import {
   trackRemoteGameCreated,
   trackRemoteGameJoined,
   winnerKind,
+  type GameSession,
 } from "@/helpers/analytics";
 import {
   appendGameLogPly,
   buildGameLogPayload,
   createGameLogSession,
+  dropGameLogPlies,
   gameModeCode,
   snapshotAiDifficulties,
   submitGameLog,
+  type GameLogSession,
 } from "@/helpers/gameLog";
 import { CMD, MSG, flag, othelloCmd, sideName } from "@/constants/terminal";
 import { type AiDifficulty } from "@/constants/ai";
@@ -55,11 +58,14 @@ import {
   simulationsFor,
   type AiDifficultyByPlayer,
 } from "@/helpers/aiDifficulty";
-import { recommendationsByIndex } from "@/helpers/aiMctsMap";
 import {
-  MCTS_OVERLAY_FADE_MS,
-  useMctsOverlayFade,
-} from "@/helpers/useMctsOverlayFade";
+  gradeTone,
+  marksFromReview,
+  reviewFromTrace,
+  type MoveReview,
+  type ReviewMark,
+  type ReviewTone,
+} from "@/helpers/moveReview";
 import {
   loadShowDetails,
   persistShowDetails,
@@ -83,20 +89,6 @@ interface IRealtimeMove {
 
 /** Minimum wall-clock time between consecutive AI turns, moves and endgame passes. */
 const AI_TURN_MIN_INTERVAL_MS = 80;
-/** Dual-AI watch mode: show root Q on the board before the move is played. */
-const DUAL_AI_MCTS_PREVIEW_MS = 1400;
-
-type MctsSnapshot = {
-  boardStr: string;
-  turnStr: string;
-  trace: AiMoveTrace;
-  /** Ring the move the search is about to play (AI commit), not ponder hints. */
-  highlightPick: boolean;
-};
-
-function isHumanPlayer(player: IPlayer) {
-  return player.type !== PlayerType.AI && player.type !== PlayerType.Remote;
-}
 
 // One paced tick per AI turn
 function paceAiTurn(signal: AbortSignal, holdMs = AI_TURN_MIN_INTERVAL_MS) {
@@ -215,6 +207,81 @@ function PlayerStatus({
   );
 }
 
+type WinSample = {
+  p: number;
+  board: IBoard;
+  lastPieceStr: string;
+  turnStr: string;
+};
+
+function isPlayedStep(prev: WinSample, curr: WinSample) {
+  return curr.lastPieceStr !== "-" && curr.lastPieceStr !== prev.lastPieceStr;
+}
+
+function playedPliesAfter(history: WinSample[], index: number) {
+  let count = 0;
+  for (let i = index + 1; i < history.length; i++) {
+    if (isPlayedStep(history[i - 1], history[i])) count += 1;
+  }
+  return count;
+}
+
+function emptyMarks(prev: Map<number, ReviewMark>) {
+  return prev.size === 0 ? prev : new Map<number, ReviewMark>();
+}
+
+function logPly(
+  session: GameSession,
+  log: GameLogSession,
+  input: {
+    pieceIndex: number;
+    thinkMs: number;
+    moverType: PlayerType;
+    aiThinkMs: number;
+    typeA: PlayerType;
+    typeB: PlayerType;
+    levels: AiDifficultyByPlayer;
+  }
+) {
+  snapshotAiDifficulties(log, input.typeA, input.typeB, input.levels);
+  appendGameLogPly(log, input.pieceIndex, input.thinkMs);
+  recordMove(session, input.moverType, input.aiThinkMs);
+  if (!session.startedTracked) {
+    session.startedTracked = true;
+    trackGameStarted(gameModeFromPlayers(input.typeA, input.typeB));
+  }
+}
+
+function branchAt(
+  history: WinSample[],
+  reviewIndex: number,
+  pieceIndex: number,
+  replacePlayed: boolean
+) {
+  const shown = history[reviewIndex];
+  const before = reviewIndex > 0 ? history[reviewIndex - 1] : null;
+  const onBoard = (sample: WinSample | null | undefined) =>
+    sample != null &&
+    playAtPieceIndex(
+      sample.board,
+      pieceIndex,
+      sample.turnStr === "0" ? 0 : 1
+    ) != null;
+  if (replacePlayed && onBoard(before)) return reviewIndex - 1;
+  if (onBoard(shown)) return reviewIndex;
+  if (onBoard(before)) return reviewIndex - 1;
+  return null;
+}
+
+function samePosition(a: WinSample, b: WinSample) {
+  return (
+    a.turnStr === b.turnStr &&
+    a.lastPieceStr === b.lastPieceStr &&
+    a.board.length === b.board.length &&
+    a.board.every((piece, index) => piece === b.board[index])
+  );
+}
+
 export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const board = useSelector((state: IGlobalState) => state.board);
   const gameAttrs = useSelector((state: IGlobalState) => state.gameAttrs);
@@ -223,17 +290,24 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const [waitingForPlayer, setWaitingForPlayer] = useState(() => Boolean(gameId));
   const [loadingAiMove, setLoadingAiMove] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const showDetailsRef = useRef(false);
-  const [winHistory, setWinHistory] = useState<
-    { p: number; board: IBoard; lastPieceStr: string; turnStr: string }[]
-  >([]);
+  const [winHistory, setWinHistory] = useState<WinSample[]>([]);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  const [reviewLine, setReviewLine] = useState<string | null>(null);
+  const [reviewTone, setReviewTone] = useState<ReviewTone | "pending">("pending");
+  const [reviewMarks, setReviewMarks] = useState<Map<number, ReviewMark>>(
+    () => new Map()
+  );
+  const [pendingBranch, setPendingBranch] = useState<{
+    at: number;
+    pieceIndex: number;
+  } | null>(null);
+  const reviewCacheRef = useRef(new Map<string, MoveReview>());
+  const reviewGenRef = useRef(0);
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficultyByPlayer>({
     0: "easy",
     1: "easy",
   });
   const aiDifficultyRef = useRef<AiDifficultyByPlayer>({ 0: "easy", 1: "easy" });
-  const [mctsSnapshot, setMctsSnapshot] = useState<MctsSnapshot | null>(null);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const router = useRouter();
@@ -249,8 +323,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const pendingAiThinkMsRef = useRef(0);
 
   const currPlayer: 0 | 1 = gameAttrs.turnStr === "0" ? 0 : 1;
-  const anyAi =
-    playerA.type === PlayerType.AI || playerB.type === PlayerType.AI;
   const isRemote = Boolean(gameId);
   const gameOver = !playerA.hasMove && !playerB.hasMove;
   const reviewing =
@@ -266,7 +338,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     const loaded = loadAiDifficultyByPlayer();
     aiDifficultyRef.current = loaded;
     const details = loadShowDetails();
-    showDetailsRef.current = details;
     const timeout = window.setTimeout(() => {
       setAiDifficulty(loaded);
       setShowDetails(details);
@@ -277,15 +348,19 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
   const handleDetailsToggle = useCallback(() => {
     setShowDetails((on) => {
       const next = !on;
-      showDetailsRef.current = next;
       persistShowDetails(next);
       if (!next) {
-        setMctsSnapshot(null);
-        void resetAiSearchTree();
+        setPendingBranch(null);
+        setReviewIndex(null);
       }
       if (next) preloadAiAgent();
       return next;
     });
+  }, []);
+
+  const handleReviewCursor = useCallback((index: number | null) => {
+    setPendingBranch(null);
+    setReviewIndex(index);
   }, []);
 
   const handleDifficultyChange = useCallback((player: 0 | 1, difficulty: AiDifficulty) => {
@@ -295,7 +370,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     };
     setAiDifficulty({ ...aiDifficultyRef.current });
     persistAiDifficulty(player, difficulty);
-    setMctsSnapshot(null);
     void resetAiSearchTree();
   }, []);
 
@@ -308,7 +382,20 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         reviewIndex != null &&
         reviewIndex < winHistory.length - 1
       ) {
-        setReviewIndex(null);
+        if (isRemote || !showDetails) {
+          setReviewIndex(null);
+          return false;
+        }
+        const at = branchAt(
+          winHistory,
+          reviewIndex,
+          pieceIndex,
+          reviewMarks.get(pieceIndex)?.kind === "better"
+        );
+        if (at != null) {
+          setPendingBranch({ at, pieceIndex });
+          return true;
+        }
         return false;
       }
       if (
@@ -346,9 +433,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       const res = playAtPieceIndex(board, pieceIndex, currentTurn);
       if (!res) return false;
 
-      if (!triggeredByRemote) {
-        setMctsSnapshot(null);
-      }
       void advanceAiSearchTree(pieceIndex);
 
       replaceQuery(pathName, {
@@ -371,25 +455,18 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         moverType === PlayerType.AI
           ? pendingAiThinkMsRef.current
           : Date.now() - lastPlyAtRef.current;
-      const log = gameLogRef.current;
-      snapshotAiDifficulties(
-        log,
-        playerA.type,
-        playerB.type,
-        aiDifficultyRef.current
-      );
-      appendGameLogPly(log, pieceIndex, thinkMs);
-      lastPlyAtRef.current = Date.now();
-      recordMove(
-        session,
+      logPly(session, gameLogRef.current, {
+        pieceIndex,
+        thinkMs,
         moverType,
-        moverType === PlayerType.AI ? pendingAiThinkMsRef.current : 0
-      );
+        aiThinkMs:
+          moverType === PlayerType.AI ? pendingAiThinkMsRef.current : 0,
+        typeA: playerA.type,
+        typeB: playerB.type,
+        levels: aiDifficultyRef.current,
+      });
+      lastPlyAtRef.current = Date.now();
       pendingAiThinkMsRef.current = 0;
-      if (!session.startedTracked) {
-        session.startedTracked = true;
-        trackGameStarted(gameModeFromPlayers(playerA.type, playerB.type));
-      }
 
       dispatch(updateBoard(res));
       return true;
@@ -403,13 +480,64 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
       playerA.type,
       playerB.type,
       reviewIndex,
-      winHistory.length,
+      reviewMarks,
+      showDetails,
+      winHistory,
     ]
   );
 
   useEffect(() => {
     handlePieceSelectionRef.current = handlePieceSelection;
   }, [handlePieceSelection]);
+
+  const confirmBranch = useCallback(() => {
+    if (isRemote || pendingBranch == null) return;
+    const sample = winHistory[pendingBranch.at];
+    if (!sample) return;
+    const turn: 0 | 1 = sample.turnStr === "0" ? 0 : 1;
+    const played = playAtPieceIndex(sample.board, pendingBranch.pieceIndex, turn);
+    if (!played) return;
+
+    const dropped = playedPliesAfter(winHistory, pendingBranch.at);
+    dropGameLogPlies(gameLogRef.current, dropped);
+    const session = sessionRef.current;
+    session.moves = Math.max(0, session.moves - dropped);
+    session.humanMoves = Math.min(session.humanMoves, session.moves);
+    session.aiMoves = Math.min(session.aiMoves, session.moves);
+    session.remoteMoves = Math.min(session.remoteMoves, session.moves);
+    session.completedTracked = false;
+    const moverType = turn === 0 ? playerA.type : playerB.type;
+    logPly(session, gameLogRef.current, {
+      pieceIndex: pendingBranch.pieceIndex,
+      thinkMs: 0,
+      moverType,
+      aiThinkMs: 0,
+      typeA: playerA.type,
+      typeB: playerB.type,
+      levels: aiDifficultyRef.current,
+    });
+    lastPlyAtRef.current = Date.now();
+    pendingAiThinkMsRef.current = 0;
+
+    setWinHistory(winHistory.slice(0, pendingBranch.at + 1));
+    setReviewIndex(null);
+    setPendingBranch(null);
+    void resetAiSearchTree();
+    replaceQuery(pathName, {
+      board: played.boardStr,
+      turn: played.turnStr,
+      lastPiece: played.lastPieceStr,
+    });
+    dispatch(updateBoard(played));
+  }, [
+    dispatch,
+    isRemote,
+    pathName,
+    pendingBranch,
+    playerA.type,
+    playerB.type,
+    winHistory,
+  ]);
 
   const handleReset = useCallback(() => {
     const session = sessionRef.current;
@@ -425,7 +553,8 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     pendingAiThinkMsRef.current = 0;
     setWinHistory([]);
     setReviewIndex(null);
-    setMctsSnapshot(null);
+    setPendingBranch(null);
+    reviewCacheRef.current.clear();
     void resetAiSearchTree();
     cancelUrlSync();
     router.push("/");
@@ -574,9 +703,11 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         lastPieceStr: gameAttrs.lastPieceStr,
         turnStr: gameAttrs.turnStr,
       };
-      setWinHistory((history) =>
-        gameAttrs.lastPieceStr === "-" ? [sample] : [...history, sample]
-      );
+      setWinHistory((history) => {
+        const prev = history[history.length - 1];
+        if (prev && samePosition(prev, sample)) return history;
+        return gameAttrs.lastPieceStr === "-" ? [sample] : [...history, sample];
+      });
     };
 
     if (gameOver) {
@@ -648,31 +779,9 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           controller.signal
         );
         if (controller.signal.aborted || trace == null || trace.index < 0) return;
-        const elapsed = Date.now() - start;
-        if (showDetailsRef.current) {
-          setMctsSnapshot({
-            boardStr: gameAttrs.boardStr,
-            turnStr: gameAttrs.turnStr,
-            trace,
-            highlightPick: true,
-          });
-        }
-        const bothAi =
-          playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
-        const previewMs = bothAi
-          ? DUAL_AI_MCTS_PREVIEW_MS
-          : AI_TURN_MIN_INTERVAL_MS;
-        const fadeOutMs = Math.min(
-          MCTS_OVERLAY_FADE_MS,
-          Math.max(48, Math.floor(previewMs * 0.35))
-        );
-        const holdMs = Math.max(0, previewMs - fadeOutMs);
-        await paceAiTurn(controller.signal, holdMs);
+        pendingAiThinkMsRef.current = Date.now() - start;
+        await paceAiTurn(controller.signal);
         if (controller.signal.aborted) return;
-        if (showDetailsRef.current) setMctsSnapshot(null);
-        await paceAiTurn(controller.signal, fadeOutMs);
-        if (controller.signal.aborted) return;
-        pendingAiThinkMsRef.current = elapsed;
         handlePieceSelectionRef.current(trace.index, false);
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -699,52 +808,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     playerA.type,
     playerB.hasMove,
     playerB.type,
-    showDetails,
-  ]);
-
-  // Ponder while a human chooses: run MCTS for the current position and keep Q on the board.
-  useEffect(() => {
-    if (!showDetails || !anyAi || gameOver || reviewing || loadingAiMove) return;
-
-    const bothAi =
-      playerA.type === PlayerType.AI && playerB.type === PlayerType.AI;
-    if (bothAi) return;
-
-    const humanSide =
-      currPlayer === 0 ? playerA : playerB;
-    if (!isHumanPlayer(humanSide)) return;
-    if (!humanSide.hasMove) return;
-
-    const controller = new AbortController();
-    (async () => {
-      const trace = await requestMctsTrace(board, currPlayer, controller.signal);
-      if (controller.signal.aborted || !trace || trace.moves.length === 0) {
-        return;
-      }
-      setMctsSnapshot({
-        boardStr: gameAttrs.boardStr,
-        turnStr: gameAttrs.turnStr,
-        trace,
-        highlightPick: false,
-      });
-    })();
-
-    return () => controller.abort();
-  }, [
-    anyAi,
-    board,
-    currPlayer,
-    gameAttrs.boardStr,
-    gameAttrs.turnStr,
-    gameOver,
-    loadingAiMove,
-    playerA.hasMove,
-    playerA.type,
-    playerB.hasMove,
-    playerB.type,
-    reviewing,
-    showDetails,
-    aiDifficulty,
   ]);
 
   useEffect(() => {
@@ -797,29 +860,105 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
     isRemote,
   ]);
 
-  const mctsBoardKey = `${gameAttrs.boardStr}:${gameAttrs.turnStr}`;
-  const mctsSnapshotActive =
-    showDetails &&
-    anyAi &&
-    !reviewing &&
-    mctsSnapshot != null &&
-    mctsSnapshot.boardStr === gameAttrs.boardStr &&
-    mctsSnapshot.turnStr === gameAttrs.turnStr;
+  useEffect(() => {
+    const gen = ++reviewGenRef.current;
+    const current = () => gen === reviewGenRef.current;
+    if (!showDetails || !reviewing || reviewIndex == null) {
+      setReviewLine(null);
+      setReviewMarks(emptyMarks);
+      return;
+    }
+    if (reviewIndex === 0) {
+      setReviewLine("opening");
+      setReviewTone("pending");
+      setReviewMarks(emptyMarks);
+      return;
+    }
 
-  const { renderedSnapshot: mctsRendered, overlayOpacity: mctsOverlayOpacity } =
-    useMctsOverlayFade(mctsSnapshotActive, mctsSnapshot, mctsBoardKey);
+    const after = winHistory[reviewIndex];
+    const before = winHistory[reviewIndex - 1];
+    if (!before || !after || !isPlayedStep(before, after)) {
+      setReviewLine(!after || after.lastPieceStr === "-" ? "opening" : "pass");
+      setReviewTone("pending");
+      setReviewMarks(emptyMarks);
+      return;
+    }
 
-  const showMctsLayer =
-    mctsRendered != null && mctsOverlayOpacity > 0.02 && showDetails && !reviewing;
-  const mctsByIndex = recommendationsByIndex(
-    showMctsLayer && mctsRendered ? mctsRendered.trace : null
-  );
-  const mctsMover =
-    showMctsLayer && mctsRendered ? mctsRendered.trace.player : null;
-  const mctsChosenIdx =
-    showMctsLayer && mctsSnapshotActive && mctsRendered.highlightPick
-      ? mctsRendered.trace.index
-      : -1;
+    const played = Number(after.lastPieceStr);
+    const mover = after.board[played];
+    if ((mover !== 0 && mover !== 1) || !Number.isInteger(played)) {
+      setReviewLine(null);
+      setReviewMarks(emptyMarks);
+      return;
+    }
+
+    const key = `${before.board.join("")}:${mover}:${played}`;
+    const cached = reviewCacheRef.current.get(key);
+    if (cached) {
+      setReviewLine(cached.summary);
+      setReviewTone(gradeTone(cached.grade));
+      setReviewMarks(marksFromReview(cached));
+      return;
+    }
+    if (loadingAiMove) {
+      setReviewLine("review ..");
+      setReviewTone("pending");
+      setReviewMarks(emptyMarks);
+      return;
+    }
+
+    setReviewLine("review ..");
+    setReviewTone("pending");
+    setReviewMarks(emptyMarks);
+    const controller = new AbortController();
+    let started = false;
+    const timer = window.setTimeout(() => {
+      started = true;
+      void (async () => {
+        try {
+          const trace = await requestMctsTrace(
+            before.board,
+            mover,
+            controller.signal
+          );
+          if (!current() || controller.signal.aborted || !trace) return;
+          const visited = trace.moves.find(
+            (move) => move.idx === played && move.n > 0
+          );
+          let playedQ = visited?.q;
+          if (playedQ == null) {
+            const toMove: 0 | 1 = after.turnStr === "0" ? 0 : 1;
+            const value = await requestAiValue(
+              after.board,
+              toMove,
+              controller.signal
+            );
+            if (!current() || controller.signal.aborted || value == null) return;
+            playedQ = -value;
+          }
+          const review = reviewFromTrace(trace, played, playedQ);
+          if (!current() || !review || controller.signal.aborted) return;
+          reviewCacheRef.current.set(key, review);
+          setReviewLine(review.summary);
+          setReviewTone(gradeTone(review.grade));
+          setReviewMarks(marksFromReview(review));
+        } catch (err) {
+          if (current() && !controller.signal.aborted) {
+            console.warn("Move review failed", err);
+            setReviewLine("review failed");
+            setReviewTone("pending");
+          }
+        }
+      })();
+    }, 150);
+
+    return () => {
+      reviewGenRef.current += 1;
+      controller.abort();
+      window.clearTimeout(timer);
+      if (started) void resetAiSearchTree();
+    };
+  }, [loadingAiMove, reviewIndex, reviewing, showDetails, winHistory]);
 
   function handleStartRemoteGame() {
     const newGameId = Math.random().toString(36).substring(2, 10);
@@ -920,12 +1059,21 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
         <WinProbability
           history={winHistory.map((sample) => sample.p)}
           cursor={reviewIndex}
-          onCursor={setReviewIndex}
+          onCursor={handleReviewCursor}
+          reviewSummary={reviewing ? reviewLine : null}
+          reviewTone={reviewTone}
+          branchSquare={
+            !isRemote && reviewing && pendingBranch
+              ? squareFromPieceIndex(pendingBranch.pieceIndex)
+              : null
+          }
+          onBranchYes={confirmBranch}
+          onBranchNo={() => setPendingBranch(null)}
         />
       </div>
       <div className="flex-1 min-h-0 w-full min-w-0 my-1.5 sm:my-2 [container-type:size] grid place-items-center">
         <div className="crt-screen aspect-square w-[min(100cqw,100cqh)]">
-          <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5">
+          <div className="arcade-felt crt-glass w-full h-full p-1 sm:p-2 md:p-2.5 overflow-visible">
             <div className="grid grid-cols-8 grid-rows-8 gap-1 sm:gap-1.5 w-full h-full min-w-0 overflow-visible">
               {shownBoard.map((player, index) => (
                 <OthelloPiece
@@ -935,13 +1083,7 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
                   handlePieceSelection={handlePieceSelection}
                   wasLastMove={index === Number(shownLastPiece)}
                   scrub={reviewIndex != null}
-                  showMctsLayer={showMctsLayer}
-                  mctsOverlayOpacity={mctsOverlayOpacity}
-                  mctsStaggerIndex={index}
-                  mctsRecommendation={mctsByIndex.get(index) ?? null}
-                  mctsChosen={index === mctsChosenIdx}
-                  moverTint={mctsMover}
-                  mctsFadeMs={MCTS_OVERLAY_FADE_MS}
+                  reviewMark={reviewing ? reviewMarks.get(index) ?? null : null}
                 />
               ))}
             </div>
@@ -984,10 +1126,6 @@ export default function OthelloBoard({ gameId }: { gameId?: string }) {
           </span>
         </button>
       </div>
-      <p className="shrink-0 pt-2 text-[10px] sm:text-xs text-crt-dim/70 leading-snug">
-        Completed games may be stored anonymously to improve the AI and measure
-        usage. Game records do not include account or room identifiers.
-      </p>
     </div>
   );
 }

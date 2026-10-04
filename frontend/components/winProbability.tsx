@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 import * as m from "motion/react-m";
-import { CMD, pWinLine } from "@/constants/terminal";
+import { CMD, MSG, pWinLine } from "@/constants/terminal";
+import type { ReviewTone } from "@/helpers/moveReview";
 
 const WIDTH = 200;
 const HEIGHT = 72;
@@ -176,14 +177,27 @@ function Odds({
   );
 }
 
+const linkClass =
+  "text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer";
+
 export default function WinProbability({
   history,
   cursor,
   onCursor,
+  reviewSummary,
+  reviewTone = "pending",
+  branchSquare = null,
+  onBranchYes,
+  onBranchNo,
 }: {
   history: number[];
   cursor: number | null;
   onCursor: (index: number | null) => void;
+  reviewSummary?: string | null;
+  reviewTone?: ReviewTone | "pending";
+  branchSquare?: string | null;
+  onBranchYes?: () => void;
+  onBranchNo?: () => void;
 }) {
   const pA = cursor == null ? history.at(-1) : history[cursor];
   const pctA = pA == null ? null : Math.round(pA * 100);
@@ -213,7 +227,7 @@ export default function WinProbability({
           {reviewing && (
             <button
               type="button"
-              className="text-crt-phosphor underline decoration-phosphor/45 underline-offset-[3px] hover:text-crt-amber hover:decoration-amber cursor-pointer"
+              className={linkClass}
               onClick={() => onCursor(null)}
             >
               {CMD.now}
@@ -226,6 +240,32 @@ export default function WinProbability({
         </div>
       </div>
       <DualSpark values={history} cursor={cursor} onCursor={onCursor} />
+      {reviewing && reviewSummary && (
+        <p
+          className={`mt-1 text-center tabular-nums ${
+            reviewTone === "good"
+              ? "text-crt-phosphor"
+              : reviewTone === "bad"
+                ? "text-crt-amber"
+                : "text-crt-dim"
+          }`}
+        >
+          {reviewSummary}
+        </p>
+      )}
+      {reviewing && branchSquare && (
+        <p className="mt-1 text-center">
+          <span className="text-crt-amber">
+            {branchSquare} — {MSG.resetFromHere}
+          </span>{" "}
+          <button type="button" className={linkClass} onClick={onBranchYes}>
+            {CMD.yes}
+          </button>{" "}
+          <button type="button" className={linkClass} onClick={onBranchNo}>
+            {CMD.no}
+          </button>
+        </p>
+      )}
     </div>
   );
 }

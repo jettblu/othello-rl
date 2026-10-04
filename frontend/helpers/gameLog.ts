@@ -59,6 +59,13 @@ export function appendGameLogPly(
   log.thinkMs.push(Math.min(3_600_000, Math.max(0, Math.round(thinkMs))));
 }
 
+export function dropGameLogPlies(log: GameLogSession, plies: number) {
+  if (plies <= 0) return;
+  const keep = Math.max(0, log.thinkMs.length - plies);
+  log.thinkMs = log.thinkMs.slice(0, keep);
+  log.gameMoves = log.gameMoves.slice(0, keep * 2);
+}
+
 export type GameLogPayload = {
   v: 1;
   id: string;
